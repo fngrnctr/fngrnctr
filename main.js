@@ -119,9 +119,9 @@
             this.pos = new Vec2(state.size.w / 2, state.size.h / 2);
             this.vel = new Vec2(0, 0);
             this.size = 42;
-            this.accel = 1400;   // acceleration toward input direction (px/s^2)
+            this.accel = 1000;   // acceleration toward input direction (px/s^2)
             this.maxSpeed = 500; // clamp top speed
-            this.drag = 1.5;     // damping coefficient (1/s), lower = more glide
+            this.drag = 3.5;     // damping coefficient (1/s), lower = more glide
         }
         update(dt, input) {
             const dir = input.getAxis();
@@ -161,6 +161,7 @@
     const input = new Input();
     const player = new Player();
     let hasInteracted = false;
+    let inkAccumulator = 0; // Track how much re-inking has occurred
 
     // Initialize HUD state from storage
     setHudHidden(getHudHidden());
@@ -183,42 +184,41 @@
         ctx.font = `${fontSize}px Impact, Haettenschweiler, 'Arial Black', sans-serif`;
         ctx.fillText('FNGRNCTR', state.size.w / 2, state.size.h / 2);
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0.5, state.size.h / 2 + 0.5);
-        ctx.lineTo(state.size.w + 0.5, state.size.h / 2 + 0.5);
-        ctx.moveTo(state.size.w / 2 + 0.5, 0.5);
-        ctx.lineTo(state.size.w / 2 + 0.5, state.size.h + 0.5);
-        ctx.stroke();
-
         player.update(dt, input);
-
-        // Slowly re-ink BEFORE erasing so new strokes reveal properly
-        // Use exponential approach for frame-rate independent behavior
-        const reinkRate = 1.5; // per second; faster re-cover to fully hide text
-        const alphaStep = 1 - Math.exp(-reinkRate * dt);
-        inkCtx.save();
-        inkCtx.globalCompositeOperation = 'source-over';
-        inkCtx.fillStyle = `rgba(0,0,0,${alphaStep})`;
-        inkCtx.fillRect(0, 0, state.size.w, state.size.h);
-        inkCtx.restore();
-
-        // Ensure any fully transparent holes are backed by solid black before new erase
-        inkCtx.save();
-        inkCtx.globalCompositeOperation = 'destination-over';
-        inkCtx.fillStyle = '#000';
-        inkCtx.fillRect(0, 0, state.size.w, state.size.h);
-        inkCtx.restore();
 
         // Erase only after first interaction/movement so no red shows initially
         const speed = player.vel.len();
         const isActive = input.pointerActive || input.keys.size > 0 || speed > 0.1;
         if (!hasInteracted && isActive) hasInteracted = true;
+
+        // Re-ink only when idle, so revealed text persists while moving
+        if (hasInteracted) {
+            // Track accumulation to accelerate fade as we approach full coverage
+            if (isActive) {
+                inkAccumulator = 0; // Reset when actively erasing
+            } else {
+                inkAccumulator += dt;
+            }
+
+            // Accelerate re-ink rate based on how long we've been idle
+            // Starts at 1.0, ramps up exponentially to ensure full coverage
+            const baseRate = 0.35; // opacity per second; lower = slower initial fade
+            const boost = Math.min(5, 1 + inkAccumulator * 0.5); // gradual acceleration
+            const reinkRate = baseRate * boost;
+            const alphaStep = Math.min(1, reinkRate * dt);
+
+            inkCtx.save();
+            inkCtx.globalCompositeOperation = 'source-over';
+            inkCtx.globalAlpha = alphaStep;
+            inkCtx.fillStyle = '#000';
+            inkCtx.fillRect(0, 0, state.size.w, state.size.h);
+            inkCtx.restore();
+        }
+
         if (hasInteracted && isActive) {
             // Soft-edge circular brush with radius based on speed
             const base = player.size * 0.45; // smaller base brush
-            const maxScreenRadius = Math.min(state.size.w, state.size.h) * 0.18; // smaller cap
+            const maxScreenRadius = Math.min(state.size.w, state.size.h) * 0.12; // smaller cap
             // Normalize speed to 0..1; use gentle easing to avoid huge sizes
             const sNorm = Math.min(1, speed / (player.maxSpeed || 400));
             const ease = Math.sqrt(sNorm); // faster early growth, slower near cap
@@ -234,16 +234,6 @@
             inkCtx.beginPath();
             inkCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
             inkCtx.fill();
-            inkCtx.restore();
-        }
-
-        // When idle, accelerate re-ink with an opaque pass
-        if (hasInteracted && !isActive) {
-            inkCtx.save();
-            inkCtx.globalCompositeOperation = 'source-over';
-            inkCtx.globalAlpha = Math.min(1, alphaStep * 2);
-            inkCtx.fillStyle = '#000';
-            inkCtx.fillRect(0, 0, state.size.w, state.size.h);
             inkCtx.restore();
         }
 
