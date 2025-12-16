@@ -1,4 +1,4 @@
-# BW Move (Black & White)
+# FNGRNCTR
 
 A tiny, dark‑mode, black‑and‑white top‑down movement game. Desktop and mobile friendly. Built with a single HTML canvas and plain JavaScript for clarity and extensibility.
 
