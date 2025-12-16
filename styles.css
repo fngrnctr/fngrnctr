@@ -1,0 +1,75 @@
+:root {
+    color-scheme: dark;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+#game {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    touch-action: none;
+    /* prevent scroll/zoom during gameplay */
+}
+
+.hud {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    pointer-events: none;
+    /* purely informational */
+}
+
+.panel {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 8px 10px;
+    pointer-events: auto;
+    /* allow taps/clicks on panel */
+    cursor: pointer;
+}
+
+.hidden {
+    display: none;
+}
+
+.help-button {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-weight: 700;
+    line-height: 34px;
+    text-align: center;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    z-index: 10;
+}
+
+.help-button:active {
+    transform: scale(0.98);
+}
+
+.help-button.hidden {
+    display: none;
+}
