@@ -202,8 +202,8 @@
 
             // Accelerate re-ink rate based on how long we've been idle
             // Starts at 1.0, ramps up exponentially to ensure full coverage
-            const baseRate = 0.35; // opacity per second; lower = slower initial fade
-            const boost = Math.min(5, 1 + inkAccumulator * 0.5); // gradual acceleration
+            const baseRate = 0.4; // opacity per second; lower = slower initial fade
+            const boost = Math.min(8, 1 + inkAccumulator * 10.0); // gradual acceleration
             const reinkRate = baseRate * boost;
             const alphaStep = Math.min(1, reinkRate * dt);
 
@@ -213,6 +213,12 @@
             inkCtx.fillStyle = '#000';
             inkCtx.fillRect(0, 0, state.size.w, state.size.h);
             inkCtx.restore();
+
+            // Ensure complete coverage after sufficient idle time
+            if (inkAccumulator > 2) {
+                inkCtx.fillStyle = '#000';
+                inkCtx.fillRect(0, 0, state.size.w, state.size.h);
+            }
         }
 
         if (hasInteracted && isActive) {
