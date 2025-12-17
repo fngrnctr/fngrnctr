@@ -62,9 +62,7 @@
         constructor() {
             this.keys = new Set();
             this.pointerActive = false;
-            this.pointerStart = new Vec2();
             this.pointerPos = new Vec2();
-            this.vector = new Vec2();
             this._bind();
         }
         _bind() {
@@ -78,9 +76,9 @@
             });
             window.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
-            const start = (x, y) => { this.pointerActive = true; this.pointerStart.set(x, y); this.pointerPos.set(x, y); };
+            const start = (x, y) => { this.pointerActive = true; this.pointerPos.set(x, y); };
             const move = (x, y) => { if (this.pointerActive) this.pointerPos.set(x, y); };
-            const end = () => { this.pointerActive = false; this.vector.set(0, 0); };
+            const end = () => { this.pointerActive = false; };
 
             canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); start(e.clientX, e.clientY); e.preventDefault(); }, { passive: false });
             canvas.addEventListener('pointermove', (e) => { move(e.clientX, e.clientY); e.preventDefault(); }, { passive: false });
@@ -103,14 +101,12 @@
             if (this.keys.has('ArrowUp') || this.keys.has('KeyW')) y -= 1;
             if (this.keys.has('ArrowDown') || this.keys.has('KeyS')) y += 1;
 
-            if (this.pointerActive) {
-                const dx = this.pointerPos.x - this.pointerStart.x;
-                const dy = this.pointerPos.y - this.pointerStart.y;
-                const v = new Vec2(dx, dy);
-                if (v.len() > 8) { v.normalize(); this.vector.copy(v); } else { this.vector.set(0, 0); }
-            }
-            if (this.pointerActive) return this.vector.clone();
-            const k = new Vec2(x, y); if (k.len() > 0) k.normalize(); return k;
+            const k = new Vec2(x, y);
+            if (k.len() > 0) k.normalize();
+            return k;
+        }
+        getPointerTarget() {
+            return this.pointerActive ? this.pointerPos.clone() : null;
         }
     }
 
@@ -124,13 +120,34 @@
             this.drag = 3.5;     // damping coefficient (1/s), lower = more glide
         }
         update(dt, input) {
-            const dir = input.getAxis();
-            if (dir.len() > 0) {
-                this.vel.add(dir.clone().scale(this.accel * dt));
+            // Check for direct pointer control first
+            const pointerTarget = input.getPointerTarget();
+            if (pointerTarget) {
+                // Move player directly to pointer position with smooth interpolation
+                const dx = pointerTarget.x - this.pos.x;
+                const dy = pointerTarget.y - this.pos.y;
+                const distance = Math.hypot(dx, dy);
+
+                if (distance > 1) {
+                    // Smooth follow with velocity for natural motion
+                    const followSpeed = 12; // Higher = snappier follow
+                    this.vel.x = dx * followSpeed;
+                    this.vel.y = dy * followSpeed;
+                } else {
+                    // Close enough, just set position directly
+                    this.pos.copy(pointerTarget);
+                    this.vel.set(0, 0);
+                }
+            } else {
+                // Keyboard control
+                const dir = input.getAxis();
+                if (dir.len() > 0) {
+                    this.vel.add(dir.clone().scale(this.accel * dt));
+                }
+                // Apply drag using exponential decay for smoother feel
+                const dragFactor = Math.exp(-this.drag * dt);
+                this.vel.scale(dragFactor);
             }
-            // Apply drag using exponential decay for smoother feel
-            const dragFactor = Math.exp(-this.drag * dt);
-            this.vel.scale(dragFactor);
 
             // Clamp max speed
             const speed = this.vel.len();
@@ -248,22 +265,6 @@
 
         // Draw player icon on top
         player.draw(ctx);
-
-        if (input.pointerActive) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(input.pointerStart.x + 0.5, input.pointerStart.y + 0.5);
-            ctx.lineTo(input.pointerPos.x + 0.5, input.pointerPos.y + 0.5);
-            ctx.stroke();
-
-            ctx.fillStyle = 'rgba(255,255,255,0.35)';
-            ctx.beginPath();
-            ctx.arc(input.pointerStart.x, input.pointerStart.y, 6, 0, Math.PI * 2);
-            ctx.fill();
-            // Auto-hide HUD after first interaction for mobile clarity
-            if (!hud.classList.contains('hidden')) setHudHidden(true);
-        }
 
         requestAnimationFrame(loop);
     }
