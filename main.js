@@ -169,6 +169,7 @@
     let playerOpacity = 1; // Player fade opacity
     let fadeDelay = 0; // Delay timer before text rises
     let frameCount = 0; // For throttling expensive operations
+    let redirectTimer = 0; // Timer for redirect after animation completes
 
     // Function to calculate reveal percentage by sampling ink layer
     function calculateRevealPercentage() {
@@ -237,6 +238,15 @@
                 const fontSize = Math.floor(minSide * 0.22);
                 const targetY = fontSize * 0.6; // Position near top
                 textYOffset = (state.size.h / 2 - targetY) * eased;
+            }
+            // After text animation completes, wait 3 seconds then redirect
+            if (revealProgress >= 1) {
+                redirectTimer += dt;
+                if (redirectTimer >= 3) {
+                    console.log('Redirecting to https://www.theknot.com/fngrnctr');
+                    window.location.href = 'https://www.theknot.com/fngrnctr';
+                    return; // Stop the loop after redirect
+                }
             }
         }
 
@@ -320,6 +330,20 @@
 
         // Draw player icon on top
         player.draw(ctx, playerOpacity);
+
+        // Draw countdown timer after text animation completes
+        if (revealProgress >= 1 && redirectTimer > 0) {
+            const countdown = Math.ceil(3 - redirectTimer);
+            if (countdown > 0) {
+                ctx.fillStyle = '#c00';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const countdownFontSize = Math.floor(minSide * 0.08);
+                ctx.font = `${countdownFontSize}px Impact, Haettenschweiler, 'Arial Black', sans-serif`;
+                const countdownY = fontSize * 0.6 + fontSize * 0.8;
+                ctx.fillText(countdown.toString(), state.size.w / 2, countdownY);
+            }
+        }
 
         requestAnimationFrame(loop);
     }
