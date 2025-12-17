@@ -18,7 +18,11 @@
         try { localStorage.setItem(STORAGE_KEY, hidden ? '1' : '0'); } catch { }
     }
     function getHudHidden() {
-        try { return localStorage.getItem(STORAGE_KEY) === '1'; } catch { return false; }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            // Default to hidden (true) if no preference stored
+            return stored === null ? true : stored === '1';
+        } catch { return true; }
     }
 
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -57,6 +61,10 @@
     }
     window.addEventListener('resize', resize, { passive: true });
     resize();
+
+    // Prevent text selection on all touch/mouse events
+    document.addEventListener('selectstart', (e) => e.preventDefault());
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
 
     class Input {
         constructor() {
@@ -115,7 +123,7 @@
             this.pos = new Vec2(state.size.w / 2, state.size.h / 2);
             this.vel = new Vec2(0, 0);
             this.size = 42;
-            this.accel = 1000;   // acceleration toward input direction (px/s^2)
+            this.accel = 1100;   // acceleration toward input direction (px/s^2)
             this.maxSpeed = 500; // clamp top speed
             this.drag = 3.5;     // damping coefficient (1/s), lower = more glide
         }
