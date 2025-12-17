@@ -6,24 +6,6 @@
     // Offscreen ink layer (black) we will erase to reveal red base
     let inkCanvas = document.createElement('canvas');
     let inkCtx = inkCanvas.getContext('2d', { alpha: true });
-    const hud = document.getElementById('hud');
-    const helpPanel = document.getElementById('help-panel');
-    const helpButton = document.getElementById('help-button');
-
-    const STORAGE_KEY = 'bwmove_hud_hidden';
-    function setHudHidden(hidden) {
-        hud.classList.toggle('hidden', hidden);
-        // Show help button only when HUD is hidden
-        if (helpButton) helpButton.classList.toggle('hidden', !hidden);
-        try { localStorage.setItem(STORAGE_KEY, hidden ? '1' : '0'); } catch { }
-    }
-    function getHudHidden() {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            // Default to hidden (true) if no preference stored
-            return stored === null ? true : stored === '1';
-        } catch { return true; }
-    }
 
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
@@ -41,7 +23,7 @@
     const state = { size: { w: 0, h: 0, dpr: 1 } };
 
     function resize() {
-        const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+        const dpr = Math.min(2, window.devicePixelRatio || 1); // Cap at 2 for performance
         const cw = Math.floor(window.innerWidth);
         const ch = Math.floor(window.innerHeight);
         canvas.style.width = cw + 'px';
@@ -76,7 +58,6 @@
         _bind() {
             window.addEventListener('keydown', (e) => {
                 const k = e.code;
-                if (k === 'KeyH') { setHudHidden(!hud.classList.contains('hidden')); return; }
                 if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(k)) {
                     this.keys.add(k);
                     e.preventDefault();
@@ -92,15 +73,6 @@
             canvas.addEventListener('pointermove', (e) => { move(e.clientX, e.clientY); e.preventDefault(); }, { passive: false });
             canvas.addEventListener('pointerup', (e) => { end(); e.preventDefault(); }, { passive: false });
             canvas.addEventListener('pointercancel', end);
-            // Allow tap/click on help panel to toggle visibility (mobile-friendly)
-            if (helpPanel) {
-                const toggle = (e) => { setHudHidden(!hud.classList.contains('hidden')); e.preventDefault(); };
-                helpPanel.addEventListener('click', toggle);
-                helpPanel.addEventListener('pointerdown', (e) => { /* avoid capturing gameplay pointer */ e.stopPropagation(); });
-            }
-            if (helpButton) {
-                helpButton.addEventListener('click', (e) => { setHudHidden(false); e.preventDefault(); });
-            }
         }
         getAxis() {
             let x = 0, y = 0;
@@ -123,14 +95,14 @@
             this.pos = new Vec2(state.size.w / 2, state.size.h / 2);
             this.vel = new Vec2(0, 0);
             this.size = 42;
-            this.accel = 1100;   // acceleration toward input direction (px/s^2)
+            this.accel = 900;   // acceleration toward input direction (px/s^2)
             this.maxSpeed = 500; // clamp top speed
             this.drag = 3.5;     // damping coefficient (1/s), lower = more glide
         }
-        update(dt, input) {
+        update(dt, input, allowInput = true) {
             // Check for direct pointer control first
             const pointerTarget = input.getPointerTarget();
-            if (pointerTarget) {
+            if (pointerTarget && allowInput) {
                 // Move player directly to pointer position with smooth interpolation
                 const dx = pointerTarget.x - this.pos.x;
                 const dy = pointerTarget.y - this.pos.y;
@@ -146,13 +118,17 @@
                     this.pos.copy(pointerTarget);
                     this.vel.set(0, 0);
                 }
-            } else {
+            } else if (allowInput) {
                 // Keyboard control
                 const dir = input.getAxis();
                 if (dir.len() > 0) {
                     this.vel.add(dir.clone().scale(this.accel * dt));
                 }
                 // Apply drag using exponential decay for smoother feel
+                const dragFactor = Math.exp(-this.drag * dt);
+                this.vel.scale(dragFactor);
+            } else {
+                // No input allowed, but apply drag to existing velocity
                 const dragFactor = Math.exp(-this.drag * dt);
                 this.vel.scale(dragFactor);
             }
@@ -176,9 +152,9 @@
             if (this.pos.y === half && this.vel.y < 0) this.vel.y *= -0.3;
             if (this.pos.y === state.size.h - half && this.vel.y > 0) this.vel.y *= -0.3;
         }
-        draw(ctx) {
+        draw(ctx, opacity = 1) {
             const half = this.size / 2;
-            ctx.fillStyle = '#fff';
+            ctx.fillStyle = opacity < 1 ? `rgba(255, 255, 255, ${opacity})` : '#fff';
             ctx.fillRect(Math.round(this.pos.x - half) + 0.5, Math.round(this.pos.y - half) + 0.5, this.size, this.size);
         }
     }
@@ -187,18 +163,82 @@
     const player = new Player();
     let hasInteracted = false;
     let inkAccumulator = 0; // Track how much re-inking has occurred
+    let isRevealed = false; // Track if text is fully revealed
+    let revealProgress = 0; // Animation progress 0..1 for rising text
+    let textYOffset = 0; // Current vertical offset of text
+    let playerOpacity = 1; // Player fade opacity
+    let fadeDelay = 0; // Delay timer before text rises
+    let frameCount = 0; // For throttling expensive operations
 
-    // Initialize HUD state from storage
-    setHudHidden(getHudHidden());
+    // Function to calculate reveal percentage by sampling ink layer
+    function calculateRevealPercentage() {
+        if (!hasInteracted) return 0;
+
+        // Sample a grid of points around the text area to check transparency
+        const centerX = Math.floor(state.size.w / 2);
+        const centerY = Math.floor(state.size.h / 2);
+        const minSide = Math.min(state.size.w, state.size.h);
+        const sampleWidth = Math.floor(minSide * 0.5);
+        const sampleHeight = Math.floor(minSide * 0.15);
+
+        const step = 30; // Sample every 30 pixels for better performance
+        let totalSamples = 0;
+        let revealedSamples = 0;
+
+        const x0 = Math.max(0, centerX - sampleWidth / 2);
+        const y0 = Math.max(0, centerY - sampleHeight / 2);
+        const x1 = Math.min(state.size.w, centerX + sampleWidth / 2);
+        const y1 = Math.min(state.size.h, centerY + sampleHeight / 2);
+
+        for (let x = x0; x < x1; x += step) {
+            for (let y = y0; y < y1; y += step) {
+                totalSamples++;
+                const imgData = inkCtx.getImageData(x * state.size.dpr, y * state.size.dpr, 1, 1);
+                const alpha = imgData.data[3];
+                // Consider revealed if alpha is below threshold (more transparent)
+                if (alpha < 128) revealedSamples++;
+            }
+        }
+
+        return totalSamples > 0 ? revealedSamples / totalSamples : 0;
+    }
 
     let last = performance.now();
     function loop(now) {
         const dt = clamp((now - last) / 1000, 0, 0.05);
         last = now;
+        frameCount++;
 
         // Base black background
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, state.size.w, state.size.h);
+
+        // Fade out player and gradually reveal remaining ink
+        if (isRevealed) {
+            if (fadeDelay < 2) {
+                fadeDelay += dt;
+                // Fade player out over 2 seconds
+                playerOpacity = Math.max(0, 1 - (fadeDelay / 2));
+                // Gradually reveal remaining ink over same 2 seconds
+                const revealAmount = fadeDelay / 2; // 0 to 1 over 2 seconds
+                inkCtx.globalCompositeOperation = 'destination-out';
+                inkCtx.globalAlpha = revealAmount * 0.5; // Gradual fade
+                inkCtx.fillStyle = '#000';
+                inkCtx.fillRect(0, 0, state.size.w, state.size.h);
+                inkCtx.globalAlpha = 1;
+                inkCtx.globalCompositeOperation = 'source-over';
+            }
+            if (fadeDelay >= 1.5 && revealProgress < 1) {
+                // Start text animation after 1.5 second delay
+                revealProgress = Math.min(1, revealProgress + dt * 0.333); // 3 second animation
+                // Ease out cubic for smooth deceleration
+                const eased = 1 - Math.pow(1 - revealProgress, 3);
+                const minSide = Math.min(state.size.w, state.size.h);
+                const fontSize = Math.floor(minSide * 0.22);
+                const targetY = fontSize * 0.6; // Position near top
+                textYOffset = (state.size.h / 2 - targetY) * eased;
+            }
+        }
 
         // Backdrop text revealed by erasing: "FNGRNCTR" in red Impact
         const minSide = Math.min(state.size.w, state.size.h);
@@ -207,17 +247,25 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = `${fontSize}px Impact, Haettenschweiler, 'Arial Black', sans-serif`;
-        ctx.fillText('FNGRNCTR', state.size.w / 2, state.size.h / 2);
+        ctx.fillText('FNGRNCTR', state.size.w / 2, state.size.h / 2 - textYOffset);
 
-        player.update(dt, input);
+        player.update(dt, input, !isRevealed);
 
         // Erase only after first interaction/movement so no red shows initially
         const speed = player.vel.len();
         const isActive = input.pointerActive || input.keys.size > 0 || speed > 0.1;
         if (!hasInteracted && isActive) hasInteracted = true;
 
+        // Check reveal percentage only when not revealed, when active, and throttled to every 5 frames
+        if (!isRevealed && hasInteracted && isActive && frameCount % 5 === 0) {
+            const revealPct = calculateRevealPercentage();
+            if (revealPct >= 0.98) {
+                isRevealed = true;
+            }
+        }
+
         // Re-ink only when idle, so revealed text persists while moving
-        if (hasInteracted) {
+        if (hasInteracted && !isRevealed) {
             // Track accumulation to accelerate fade as we approach full coverage
             if (isActive) {
                 inkAccumulator = 0; // Reset when actively erasing
@@ -232,12 +280,12 @@
             const reinkRate = baseRate * boost;
             const alphaStep = Math.min(1, reinkRate * dt);
 
-            inkCtx.save();
             inkCtx.globalCompositeOperation = 'source-over';
             inkCtx.globalAlpha = alphaStep;
             inkCtx.fillStyle = '#000';
             inkCtx.fillRect(0, 0, state.size.w, state.size.h);
-            inkCtx.restore();
+            inkCtx.globalAlpha = 1;
+            inkCtx.globalCompositeOperation = 'source-over';
 
             // Ensure complete coverage after sufficient idle time
             if (inkAccumulator > 2) {
@@ -246,7 +294,7 @@
             }
         }
 
-        if (hasInteracted && isActive) {
+        if (hasInteracted && isActive && !isRevealed) {
             // Soft-edge circular brush with radius based on speed
             const base = player.size * 0.45; // smaller base brush
             const maxScreenRadius = Math.min(state.size.w, state.size.h) * 0.12; // smaller cap
@@ -254,10 +302,9 @@
             const sNorm = Math.min(1, speed / (player.maxSpeed || 400));
             const ease = Math.sqrt(sNorm); // faster early growth, slower near cap
             const radius = Math.max(18, base + ease * (maxScreenRadius - base));
-            inkCtx.save();
+
             inkCtx.globalCompositeOperation = 'destination-out';
             const g = inkCtx.createRadialGradient(player.pos.x, player.pos.y, 0, player.pos.x, player.pos.y, radius);
-            // Strong reveal at core, extremely soft outer falloff
             g.addColorStop(0.0, 'rgba(0,0,0,1.0)');
             g.addColorStop(0.6, 'rgba(0,0,0,0.15)');
             g.addColorStop(1.0, 'rgba(0,0,0,0)');
@@ -265,14 +312,14 @@
             inkCtx.beginPath();
             inkCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
             inkCtx.fill();
-            inkCtx.restore();
+            inkCtx.globalCompositeOperation = 'source-over';
         }
 
         // Composite ink layer onto main canvas (remaining black)
         ctx.drawImage(inkCanvas, 0, 0, state.size.w, state.size.h);
 
         // Draw player icon on top
-        player.draw(ctx);
+        player.draw(ctx, playerOpacity);
 
         requestAnimationFrame(loop);
     }
