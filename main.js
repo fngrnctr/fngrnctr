@@ -7,6 +7,10 @@
     let inkCanvas = document.createElement('canvas');
     let inkCtx = inkCanvas.getContext('2d', { alpha: true });
 
+    // Load player icon image
+    const playerIcon = new Image();
+    playerIcon.src = 'nectar-preview.png';
+
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
     class Vec2 {
@@ -154,8 +158,15 @@
         }
         draw(ctx, opacity = 1) {
             const half = this.size / 2;
-            ctx.fillStyle = opacity < 1 ? `rgba(255, 255, 255, ${opacity})` : '#fff';
-            ctx.fillRect(Math.round(this.pos.x - half) + 0.5, Math.round(this.pos.y - half) + 0.5, this.size, this.size);
+            if (playerIcon.complete) {
+                ctx.globalAlpha = opacity;
+                ctx.drawImage(playerIcon, Math.round(this.pos.x - half), Math.round(this.pos.y - half), this.size, this.size);
+                ctx.globalAlpha = 1;
+            } else {
+                // Fallback to white square while image loads
+                ctx.fillStyle = opacity < 1 ? `rgba(255, 255, 255, ${opacity})` : '#000000ff';
+                ctx.fillRect(Math.round(this.pos.x - half) + 0.5, Math.round(this.pos.y - half) + 0.5, this.size, this.size);
+            }
         }
     }
 
@@ -250,10 +261,10 @@
             }
         }
 
-        // Backdrop text revealed by erasing: "FNGRNCTR" in red Impact
+        // Backdrop text revealed by erasing: "FNGRNCTR" in white Impact
         const minSide = Math.min(state.size.w, state.size.h);
         const fontSize = Math.floor(minSide * 0.22);
-        ctx.fillStyle = '#c00';
+        ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = `${fontSize}px Impact, Haettenschweiler, 'Arial Black', sans-serif`;
@@ -285,7 +296,7 @@
 
             // Accelerate re-ink rate based on how long we've been idle
             // Starts at 1.0, ramps up exponentially to ensure full coverage
-            const baseRate = 0.4; // opacity per second; lower = slower initial fade
+            const baseRate = 0.3; // opacity per second; lower = slower initial fade
             const boost = Math.min(8, 1 + inkAccumulator * 10.0); // gradual acceleration
             const reinkRate = baseRate * boost;
             const alphaStep = Math.min(1, reinkRate * dt);
@@ -335,7 +346,7 @@
         if (revealProgress >= 1 && redirectTimer > 0) {
             const countdown = Math.ceil(3 - redirectTimer);
             if (countdown > 0) {
-                ctx.fillStyle = '#c00';
+                ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 const countdownFontSize = Math.floor(minSide * 0.08);
