@@ -73,7 +73,11 @@
             const move = (x, y) => { if (this.pointerActive) this.pointerPos.set(x, y); };
             const end = () => { this.pointerActive = false; };
 
-            canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); start(e.clientX, e.clientY); e.preventDefault(); }, { passive: false });
+            canvas.addEventListener('pointerdown', (e) => {
+                canvas.setPointerCapture(e.pointerId);
+                start(e.clientX, e.clientY);
+                e.preventDefault();
+            }, { passive: false });
             canvas.addEventListener('pointermove', (e) => { move(e.clientX, e.clientY); e.preventDefault(); }, { passive: false });
             canvas.addEventListener('pointerup', (e) => { end(); e.preventDefault(); }, { passive: false });
             canvas.addEventListener('pointercancel', end);
@@ -181,6 +185,120 @@
     let fadeDelay = 0; // Delay timer before text rises
     let frameCount = 0; // For throttling expensive operations
     let redirectTimer = 0; // Timer for redirect after animation completes
+    let albumsOpacity = 0; // Opacity for album grid fade-in
+    let albumsLoaded = 0; // Track how many album images have loaded
+
+    // 6 most recent albums from fngrnctr.bandcamp.com
+    const albums = [
+        {
+            title: 'Ruby',
+            url: 'https://fngrnctr.bandcamp.com/album/ruby',
+            artUrl: 'https://f4.bcbits.com/img/a2483217735_10.jpg'
+        },
+        {
+            title: 'Filthy Rich',
+            url: 'https://fngrnctr.bandcamp.com/album/filthy-rich',
+            artUrl: 'https://f4.bcbits.com/img/a3618756549_10.jpg'
+        },
+        {
+            title: 'Curse of the Doom Wizard',
+            url: 'https://fngrnctr.bandcamp.com/album/curse-of-the-doom-wizard',
+            artUrl: 'https://f4.bcbits.com/img/a2806072651_10.jpg'
+        },
+        {
+            title: 'The Ark of Rhyme',
+            url: 'https://fngrnctr.bandcamp.com/album/the-ark-of-rhyme',
+            artUrl: 'https://f4.bcbits.com/img/a2390029355_10.jpg'
+        },
+        {
+            title: 'Totally Bad Dudes',
+            url: 'https://fngrnctr.bandcamp.com/album/totally-bad-dudes-2',
+            artUrl: 'https://f4.bcbits.com/img/a2322292393_10.jpg'
+        },
+        {
+            title: 'Adventures in $herwood: Welcome to Smockville',
+            url: 'https://fngrnctr.bandcamp.com/album/adventures-in-herwood-welcome-to-smockville',
+            artUrl: 'https://f4.bcbits.com/img/a1625422072_10.jpg'
+        }
+    ];
+
+    // Create HTML elements for album art (avoids CORS canvas issues)
+    const albumContainer = document.createElement('div');
+    albumContainer.id = 'album-container';
+    albumContainer.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.8s ease;
+    `;
+    document.body.appendChild(albumContainer);
+
+    const albumElements = albums.map((album, i) => {
+        const link = document.createElement('a');
+        link.href = album.url;
+        link.target = '_blank';
+        link.style.cssText = `
+            position: absolute;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 2px solid #fff;
+        `;
+        link.onmouseenter = () => {
+            link.style.transform = 'scale(1.05)';
+            link.style.boxShadow = '0 8px 20px rgba(255,255,255,0.3)';
+        };
+        link.onmouseleave = () => {
+            link.style.transform = 'scale(1)';
+            link.style.boxShadow = 'none';
+        };
+
+        const img = document.createElement('img');
+        img.src = album.artUrl;
+        img.alt = album.title;
+        img.draggable = false;
+        img.style.cssText = `
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            user-select: none;
+            -webkit-user-drag: none;
+        `;
+        img.onload = () => { albumsLoaded++; };
+        img.onerror = () => { console.error('Failed to load album art:', album.title); };
+
+        link.appendChild(img);
+        albumContainer.appendChild(link);
+        return link;
+    });
+
+    // Function to update album positions
+    function updateAlbumPositions() {
+        const minSide = Math.min(state.size.w, state.size.h);
+        const albumSize = Math.min(120, minSide * 0.15);
+        const gap = albumSize * 0.15;
+        const totalWidth = albums.length * albumSize + (albums.length - 1) * gap;
+        const startX = (state.size.w - totalWidth) / 2;
+        const centerY = state.size.h / 2;
+
+        albumElements.forEach((elem, i) => {
+            const x = startX + i * (albumSize + gap);
+            const y = centerY - albumSize / 2;
+            elem.style.left = Math.round(x) + 'px';
+            elem.style.top = Math.round(y) + 'px';
+            elem.style.width = albumSize + 'px';
+            elem.style.height = albumSize + 'px';
+        });
+    }
+
+    // Update album positions on resize
+    window.addEventListener('resize', updateAlbumPositions, { passive: true });
+    updateAlbumPositions();
 
     // Function to calculate reveal percentage by sampling ink layer
     function calculateRevealPercentage() {
@@ -250,15 +368,25 @@
                 const targetY = fontSize * 0.6; // Position near top
                 textYOffset = (state.size.h / 2 - targetY) * eased;
             }
-            // After text animation completes, wait 3 seconds then redirect
-            if (revealProgress >= 1) {
-                redirectTimer += dt;
-                if (redirectTimer >= 3) {
-                    console.log('Redirecting to https://www.theknot.com/fngrnctr');
-                    window.location.href = 'https://www.theknot.com/fngrnctr';
-                    return; // Stop the loop after redirect
+            // Fade in albums after text animation completes
+            if (revealProgress >= 1 && albumsOpacity < 1) {
+                albumsOpacity = Math.min(1, albumsOpacity + dt * 0.8); // Fade in over ~1.25 seconds
+                albumContainer.style.opacity = albumsOpacity;
+                // Enable interactions once fully visible
+                if (albumsOpacity >= 1) {
+                    albumContainer.style.pointerEvents = 'auto';
                 }
             }
+            // After text animation completes, wait 3 seconds then redirect
+            // TEMPORARILY DISABLED - Adding new feature
+            // if (revealProgress >= 1) {
+            //     redirectTimer += dt;
+            //     if (redirectTimer >= 3) {
+            //         console.log('Redirecting to https://www.theknot.com/fngrnctr');
+            //         window.location.href = 'https://www.theknot.com/fngrnctr';
+            //         return; // Stop the loop after redirect
+            //     }
+            // }
         }
 
         // Backdrop text revealed by erasing: "FNGRNCTR" in white Impact
@@ -342,19 +470,7 @@
         // Draw player icon on top
         player.draw(ctx, playerOpacity);
 
-        // Draw countdown timer after text animation completes
-        if (revealProgress >= 1 && redirectTimer > 0) {
-            const countdown = Math.ceil(3 - redirectTimer);
-            if (countdown > 0) {
-                ctx.fillStyle = '#fff';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                const countdownFontSize = Math.floor(minSide * 0.08);
-                ctx.font = `${countdownFontSize}px Impact, Haettenschweiler, 'Arial Black', sans-serif`;
-                const countdownY = fontSize * 0.6 + fontSize * 0.8;
-                ctx.fillText(countdown.toString(), state.size.w / 2, countdownY);
-            }
-        }
+        // Albums are now rendered as HTML elements (see albumContainer)
 
         requestAnimationFrame(loop);
     }
