@@ -5,7 +5,7 @@
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     // Offscreen ink layer (black) we will erase to reveal red base
     let inkCanvas = document.createElement('canvas');
-    let inkCtx = inkCanvas.getContext('2d', { alpha: true });
+    let inkCtx = inkCanvas.getContext('2d', { alpha: true, willReadFrequently: true });
 
     // Load player icon image
     const playerIcon = new Image();
@@ -187,38 +187,97 @@
     let redirectTimer = 0; // Timer for redirect after animation completes
     let albumsOpacity = 0; // Opacity for album grid fade-in
     let albumsLoaded = 0; // Track how many album images have loaded
+    let selectedAlbumIndex = null; // Track which album is currently focused (null = grid view)
 
     // 6 most recent albums from fngrnctr.bandcamp.com
     const albums = [
         {
             title: 'Ruby',
             url: 'https://fngrnctr.bandcamp.com/album/ruby',
-            artUrl: 'https://f4.bcbits.com/img/a2483217735_10.jpg'
+            artUrl: 'https://f4.bcbits.com/img/a2483217735_10.jpg',
+            tracks: [
+                { name: 'First Day of Summer', url: 'https://fngrnctr.bandcamp.com/track/first-day-of-summer', duration: '02:45' },
+                { name: 'Call from Kenneth (Skit)', url: 'https://fngrnctr.bandcamp.com/track/call-from-kenneth-skit', duration: '01:58' },
+                { name: 'The Heist', url: 'https://fngrnctr.bandcamp.com/track/the-heist', duration: '02:13' },
+                { name: 'Destroy the Ruby, Larry (Skit)', url: 'https://fngrnctr.bandcamp.com/track/destroy-the-ruby-larry-skit', duration: '00:30' },
+                { name: 'Three Nights in Dallas', url: 'https://fngrnctr.bandcamp.com/track/three-nights-in-dallas', duration: '02:47' },
+                { name: 'Cuffed', url: 'https://fngrnctr.bandcamp.com/track/cuffed', duration: '03:43' },
+                { name: 'Failed My Friend', url: 'https://fngrnctr.bandcamp.com/track/failed-my-friend', duration: '02:30' },
+                { name: 'Who Put the Ruby in the Sky?', url: 'https://fngrnctr.bandcamp.com/track/who-put-the-ruby-in-the-sky', duration: '03:37' }
+            ]
         },
         {
             title: 'Filthy Rich',
             url: 'https://fngrnctr.bandcamp.com/album/filthy-rich',
-            artUrl: 'https://f4.bcbits.com/img/a3618756549_10.jpg'
+            artUrl: 'https://f4.bcbits.com/img/a3618756549_10.jpg',
+            tracks: [
+                { name: 'Wednesday Afternoon', url: 'https://fngrnctr.bandcamp.com/track/wednesday-afternoon', duration: '03:21' },
+                { name: 'Butler', url: 'https://fngrnctr.bandcamp.com/track/butler', duration: '02:50' },
+                { name: 'Satin Bathrobes', url: 'https://fngrnctr.bandcamp.com/track/satin-bathrobes', duration: '01:55' },
+                { name: 'New Day', url: 'https://fngrnctr.bandcamp.com/track/new-day', duration: '01:28' },
+                { name: 'Big Bad', url: 'https://fngrnctr.bandcamp.com/track/big-bad', duration: '01:16' },
+                { name: 'Filthy Rich', url: 'https://fngrnctr.bandcamp.com/track/filthy-rich', duration: '02:47' },
+                { name: 'Clones', url: 'https://fngrnctr.bandcamp.com/track/clones', duration: '03:51' },
+                { name: '20,000 Bones', url: 'https://fngrnctr.bandcamp.com/track/20-000-bones', duration: '01:22' },
+                { name: 'Growth Mindset', url: 'https://fngrnctr.bandcamp.com/track/growth-mindset', duration: '03:20' },
+                { name: 'Fresh Cooked Meal', url: 'https://fngrnctr.bandcamp.com/track/fresh-cooked-meal', duration: '03:34' },
+                { name: 'Sludge Factory', url: 'https://fngrnctr.bandcamp.com/track/sludge-factory', duration: '03:06' }
+            ]
         },
         {
             title: 'Curse of the Doom Wizard',
             url: 'https://fngrnctr.bandcamp.com/album/curse-of-the-doom-wizard',
-            artUrl: 'https://f4.bcbits.com/img/a2806072651_10.jpg'
+            artUrl: 'https://f4.bcbits.com/img/a2806072651_10.jpg',
+            tracks: [
+                { name: 'Mythic Motel', url: 'https://fngrnctr.bandcamp.com/track/mythic-motel', duration: '02:07' },
+                { name: 'Doom', url: 'https://fngrnctr.bandcamp.com/track/doom', duration: '01:32' },
+                { name: 'Memento Mori', url: 'https://fngrnctr.bandcamp.com/track/memento-mori', duration: '01:21' },
+                { name: 'Born to Die', url: 'https://fngrnctr.bandcamp.com/track/born-to-die', duration: '02:34' },
+                { name: 'Junkyard Jam', url: 'https://fngrnctr.bandcamp.com/track/junkyard-jam', duration: '01:57' },
+                { name: 'Gasoline', url: 'https://fngrnctr.bandcamp.com/track/gasoline', duration: '03:35' },
+                { name: 'Going to Space', url: 'https://fngrnctr.bandcamp.com/track/going-to-space', duration: '03:18' },
+                { name: 'Club Berlin', url: 'https://fngrnctr.bandcamp.com/track/club-berlin', duration: '06:31' }
+            ]
         },
         {
             title: 'The Ark of Rhyme',
             url: 'https://fngrnctr.bandcamp.com/album/the-ark-of-rhyme',
-            artUrl: 'https://f4.bcbits.com/img/a2390029355_10.jpg'
+            artUrl: 'https://f4.bcbits.com/img/a2390029355_10.jpg',
+            tracks: [
+                { name: 'Business District', url: 'https://fngrnctr.bandcamp.com/track/business-district', duration: '02:53' },
+                { name: 'Ready to Rap (Boys in the Back)', url: 'https://fngrnctr.bandcamp.com/track/ready-to-rap-boys-in-the-back', duration: '03:23' },
+                { name: 'Sugar', url: 'https://fngrnctr.bandcamp.com/track/sugar', duration: '02:15' },
+                { name: 'Down to Get Out', url: 'https://fngrnctr.bandcamp.com/track/down-to-get-out', duration: '03:37' },
+                { name: 'Blue Skies Only', url: 'https://fngrnctr.bandcamp.com/track/blue-skies-only', duration: '03:49' },
+                { name: 'Barge Pirates', url: 'https://fngrnctr.bandcamp.com/track/barge-pirates', duration: '03:22' }
+            ]
         },
         {
             title: 'Totally Bad Dudes',
             url: 'https://fngrnctr.bandcamp.com/album/totally-bad-dudes-2',
-            artUrl: 'https://f4.bcbits.com/img/a2322292393_10.jpg'
+            artUrl: 'https://f4.bcbits.com/img/a2322292393_10.jpg',
+            tracks: [
+                { name: 'Jackals', url: 'https://fngrnctr.bandcamp.com/track/jackals', duration: '03:59' },
+                { name: 'Glasgow', url: 'https://fngrnctr.bandcamp.com/track/glasgow', duration: '03:43' },
+                { name: 'Bad Dudes', url: 'https://fngrnctr.bandcamp.com/track/bad-dudes', duration: '03:37' },
+                { name: 'Nectar Shuffle', url: 'https://fngrnctr.bandcamp.com/track/nectar-shuffle', duration: '02:16' },
+                { name: 'Freak 4 U', url: 'https://fngrnctr.bandcamp.com/track/freak-4-u', duration: '03:29' },
+                { name: 'Y!KE', url: 'https://fngrnctr.bandcamp.com/track/y-ke', duration: '01:52' },
+                { name: 'Deep in the Weekend', url: 'https://fngrnctr.bandcamp.com/track/deep-in-the-weekend', duration: '03:08' },
+                { name: 'Say Goodbye', url: 'https://fngrnctr.bandcamp.com/track/say-goodbye', duration: '03:00' }
+            ]
         },
         {
             title: 'Adventures in $herwood: Welcome to Smockville',
             url: 'https://fngrnctr.bandcamp.com/album/adventures-in-herwood-welcome-to-smockville',
-            artUrl: 'https://f4.bcbits.com/img/a1625422072_10.jpg'
+            artUrl: 'https://f4.bcbits.com/img/a1625422072_10.jpg',
+            tracks: [
+                { name: 'Straight Beamin\'', url: 'https://fngrnctr.bandcamp.com/track/straight-beamin', duration: '03:48' },
+                { name: 'Sherwood Anthem', url: 'https://fngrnctr.bandcamp.com/track/sherwood-anthem', duration: '03:09' },
+                { name: 'Welcome to Smockville', url: 'https://fngrnctr.bandcamp.com/track/welcome-to-smockville', duration: '03:56' },
+                { name: 'I-80 E', url: 'https://fngrnctr.bandcamp.com/track/i-80-e', duration: '05:40' },
+                { name: '31 on a Good Day', url: 'https://fngrnctr.bandcamp.com/track/31-on-a-good-day', duration: '02:06' }
+            ]
         }
     ];
 
@@ -238,6 +297,18 @@
     `;
     document.body.appendChild(albumContainer);
 
+    // Create embedded player container
+    const playerContainer = document.createElement('div');
+    playerContainer.id = 'player-container';
+    playerContainer.style.cssText = `
+        position: fixed;
+        z-index: 12;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    `;
+    document.body.appendChild(playerContainer);
+
     const albumElements = albums.map((album, i) => {
         const link = document.createElement('a');
         link.href = album.url;
@@ -245,16 +316,44 @@
         link.style.cssText = `
             position: absolute;
             cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transition: all 0.4s ease;
             border: 2px solid #fff;
+            z-index: ${10 + i};
         `;
+
+        // Click handler to focus/unfocus album
+        link.addEventListener('click', (e) => {
+            // Only handle focus/unfocus, not external navigation
+            if (selectedAlbumIndex === null) {
+                // Focus this album
+                e.preventDefault();
+                selectedAlbumIndex = i;
+                updateAlbumPositions();
+            } else if (selectedAlbumIndex === i) {
+                // Unfocus - return to grid
+                e.preventDefault();
+                selectedAlbumIndex = null;
+                updateAlbumPositions();
+            } else {
+                // Click on different album in sidebar - switch focus
+                e.preventDefault();
+                selectedAlbumIndex = i;
+                updateAlbumPositions();
+            }
+        });
+
         link.onmouseenter = () => {
-            link.style.transform = 'scale(1.05)';
-            link.style.boxShadow = '0 8px 20px rgba(255,255,255,0.3)';
+            if (selectedAlbumIndex === null || selectedAlbumIndex !== i) {
+                link.style.transform = link.style.transform.includes('scale') ?
+                    link.style.transform : 'scale(1.05)';
+                link.style.boxShadow = '0 8px 20px rgba(255,255,255,0.3)';
+            }
         };
         link.onmouseleave = () => {
-            link.style.transform = 'scale(1)';
-            link.style.boxShadow = 'none';
+            if (selectedAlbumIndex === null || selectedAlbumIndex !== i) {
+                link.style.transform = link.style.transform.replace(/scale\([^)]*\)\s*/g, '');
+                link.style.boxShadow = 'none';
+            }
         };
 
         const img = document.createElement('img');
@@ -280,20 +379,96 @@
     // Function to update album positions
     function updateAlbumPositions() {
         const minSide = Math.min(state.size.w, state.size.h);
-        const albumSize = Math.min(120, minSide * 0.15);
-        const gap = albumSize * 0.15;
-        const totalWidth = albums.length * albumSize + (albums.length - 1) * gap;
-        const startX = (state.size.w - totalWidth) / 2;
-        const centerY = state.size.h / 2;
 
-        albumElements.forEach((elem, i) => {
-            const x = startX + i * (albumSize + gap);
-            const y = centerY - albumSize / 2;
-            elem.style.left = Math.round(x) + 'px';
-            elem.style.top = Math.round(y) + 'px';
-            elem.style.width = albumSize + 'px';
-            elem.style.height = albumSize + 'px';
-        });
+        if (selectedAlbumIndex === null) {
+            // Grid view - horizontal row of albums
+            const albumSize = Math.min(120, minSide * 0.15);
+            const gap = albumSize * 0.15;
+            const totalWidth = albums.length * albumSize + (albums.length - 1) * gap;
+            const startX = (state.size.w - totalWidth) / 2;
+            const centerY = state.size.h / 2;
+
+            albumElements.forEach((elem, i) => {
+                const x = startX + i * (albumSize + gap);
+                const y = centerY - albumSize / 2;
+                elem.style.left = Math.round(x) + 'px';
+                elem.style.top = Math.round(y) + 'px';
+                elem.style.width = albumSize + 'px';
+                elem.style.height = albumSize + 'px';
+                elem.style.transform = '';
+                elem.style.zIndex = 10 + i;
+            });
+
+            // Hide player
+            playerContainer.style.opacity = '0';
+            playerContainer.style.pointerEvents = 'none';
+        } else {
+            // Focused view - one large album in center, others in sidebar
+            const focusedSize = Math.min(400, minSide * 0.5, state.size.h * 0.5);
+            const sidebarSize = Math.min(100, minSide * 0.12);
+            const sidebarGap = sidebarSize * 0.2;
+            const sidebarX = Math.max(20, (state.size.w - focusedSize) / 4 - sidebarSize / 2);
+
+            // Position focused album vertically centered
+            const focusedX = (state.size.w - focusedSize) / 2;
+            const focusedY = (state.size.h - focusedSize) / 2;
+
+            albumElements.forEach((elem, i) => {
+                if (i === selectedAlbumIndex) {
+                    // Focused album - center and large
+                    elem.style.left = Math.round(focusedX) + 'px';
+                    elem.style.top = Math.round(focusedY) + 'px';
+                    elem.style.width = focusedSize + 'px';
+                    elem.style.height = focusedSize + 'px';
+                    elem.style.transform = '';
+                    elem.style.zIndex = 100;
+                } else {
+                    // Sidebar albums - vertical stack on left
+                    const sidebarIndex = i < selectedAlbumIndex ? i : i - 1;
+                    const totalSidebarHeight = (albums.length - 1) * (sidebarSize + sidebarGap) - sidebarGap;
+                    const startY = (state.size.h - totalSidebarHeight) / 2;
+                    const y = startY + sidebarIndex * (sidebarSize + sidebarGap);
+
+                    elem.style.left = Math.round(sidebarX) + 'px';
+                    elem.style.top = Math.round(y) + 'px';
+                    elem.style.width = sidebarSize + 'px';
+                    elem.style.height = sidebarSize + 'px';
+                    elem.style.transform = '';
+                    elem.style.zIndex = 10 + i;
+                }
+            });
+
+            // Show Bandcamp album embed player to the right of the album
+            const albumId = getAlbumId(selectedAlbumIndex);
+            const embedUrl = `https://bandcamp.com/EmbeddedPlayer/album=${albumId}/size=large/bgcol=333333/linkcol=ffffff/artwork=none/transparent=true/`;
+
+            playerContainer.innerHTML = `
+                <iframe style="border: 0; width: 350px; height: ${focusedSize}px;" 
+                        src="${embedUrl}" 
+                        seamless>
+                </iframe>
+            `;
+
+            // Position player to the right of album
+            const playerX = focusedX + focusedSize + 20;
+            playerContainer.style.left = playerX + 'px';
+            playerContainer.style.top = focusedY + 'px';
+            playerContainer.style.opacity = '1';
+            playerContainer.style.pointerEvents = 'auto';
+        }
+    }
+
+    // Helper to get Bandcamp album ID from album index
+    function getAlbumId(index) {
+        const albumIds = [
+            '415329228',   // Ruby
+            '3668548966',  // Filthy Rich (from user's example embed code)
+            '1693447220',  // Curse of the Doom Wizard
+            '3585089304',  // The Ark of Rhyme
+            '1576237228',  // Totally Bad Dudes
+            '3695036422'   // Adventures in $herwood
+        ];
+        return albumIds[index] || albumIds[0];
     }
 
     // Update album positions on resize
@@ -365,7 +540,9 @@
                 const eased = 1 - Math.pow(1 - revealProgress, 3);
                 const minSide = Math.min(state.size.w, state.size.h);
                 const fontSize = Math.floor(minSide * 0.22);
-                const targetY = fontSize * 0.6; // Position near top
+                // Keep text visible with minimum margin from top
+                const minMargin = Math.max(50, fontSize * 0.5);
+                const targetY = minMargin + fontSize / 2;
                 textYOffset = (state.size.h / 2 - targetY) * eased;
             }
             // Fade in albums after text animation completes
