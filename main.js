@@ -282,6 +282,50 @@
                 { name: 'I-80 E', url: 'https://fngrnctr.bandcamp.com/track/i-80-e', duration: '05:40' },
                 { name: '31 on a Good Day', url: 'https://fngrnctr.bandcamp.com/track/31-on-a-good-day', duration: '02:06' }
             ]
+        },
+        {
+            title: 'Canonical Nectar',
+            url: 'https://fngrnctr.bandcamp.com/album/canonical-nectar-3',
+            artUrl: 'https://f4.bcbits.com/img/a0742649748_10.jpg',
+            tracks: [
+                { name: 'Survival of the Chillest', url: 'https://fngrnctr.bandcamp.com/track/survival-of-the-chillest', duration: '04:41' }
+            ]
+        },
+        {
+            title: 'Tony Hawk One',
+            url: 'https://fngrnctr.bandcamp.com/album/tony-hawk-one',
+            artUrl: 'https://f4.bcbits.com/img/a3694744642_10.jpg',
+            tracks: [
+                { name: 'Tony Hawk One', url: 'https://fngrnctr.bandcamp.com/track/tony-hawk-one', duration: '04:06' }
+            ]
+        },
+        {
+            title: 'Fuck The Environment',
+            url: 'https://fngrnctr.bandcamp.com/album/fuck-the-environment',
+            artUrl: 'https://f4.bcbits.com/img/a3026720147_10.jpg',
+            tracks: [
+                { name: 'Fuck the Environment', url: 'https://fngrnctr.bandcamp.com/track/fuck-the-environment', duration: '03:13' }
+            ]
+        },
+        {
+            title: 'MEGA BONE SLAM FEST',
+            url: 'https://fngrnctr.bandcamp.com/album/fingernectar-presents-mega-bone-slam-fest-a-christmas-adventure',
+            artUrl: 'https://f4.bcbits.com/img/a0486793882_10.jpg',
+            tracks: [
+                { name: 'The Scene Is Set (Intro)', url: 'https://fngrnctr.bandcamp.com/track/the-scene-is-set-intro', duration: '00:35' },
+                { name: 'Gimme Presents', url: 'https://fngrnctr.bandcamp.com/track/gimme-presents', duration: '01:59' },
+                { name: 'Root Beer', url: 'https://fngrnctr.bandcamp.com/track/root-beer', duration: '04:06' },
+                { name: 'Farewell For Now (Outro)', url: 'https://fngrnctr.bandcamp.com/track/farewell-for-now-outro', duration: '00:30' },
+                { name: 'Everybody Loves Christmas', url: 'https://fngrnctr.bandcamp.com/track/everybody-loves-christmas', duration: '02:45' }
+            ]
+        },
+        {
+            title: 'Sex Erector',
+            url: 'https://fngrnctr.bandcamp.com/album/sex-erector',
+            artUrl: 'https://f4.bcbits.com/img/a1646405077_10.jpg',
+            tracks: [
+                { name: 'Whole Lotta Doody', url: 'https://fngrnctr.bandcamp.com/track/whole-lotta-doody', duration: '02:13' }
+            ]
         }
     ];
 
@@ -319,24 +363,6 @@
         transition: opacity 0.3s ease;
     `;
     document.body.appendChild(playerContainer);
-
-    // Create countdown display element (z-index above albums)
-    const countdownElement = document.createElement('div');
-    countdownElement.id = 'countdown-display';
-    countdownElement.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 500;
-        color: #fff;
-        font-family: Impact, Haettenschweiler, 'Arial Black', sans-serif;
-        font-weight: bold;
-        text-align: center;
-        pointer-events: none;
-        opacity: 0;
-    `;
-    document.body.appendChild(countdownElement);
 
     const albumElements = albums.map((album, i) => {
         const link = document.createElement('a');
@@ -594,7 +620,7 @@
                     elem.style.width = albumSize + 'px';
                     elem.style.height = albumSize + 'px';
                     elem.style.transform = 'none';
-                    elem.style.zIndex = 100 + i;
+                    elem.style.zIndex = 100 + (albums.length - 1 - i);
                 });
 
                 albumContainer.style.opacity = '1';
@@ -635,7 +661,7 @@
                         elem.style.width = albumSize + 'px';
                         elem.style.height = albumSize + 'px';
                         elem.style.transform = `perspective(1000px) rotateX(${data.rotationX}deg) rotateY(${data.rotationY}deg)`;
-                        elem.style.zIndex = 100 + i;
+                        elem.style.zIndex = 100 + (albums.length - 1 - i);
                     });
 
                     albumContainer.style.opacity = '1';
@@ -737,24 +763,11 @@
         // Draw player icon on top
         player.draw(ctx, playerOpacity);
 
-        // Update countdown display and fade to black
-        if (revealProgress >= 1 && redirectTimer < 6) {
-            if (redirectTimer < 5) {
-                // Show countdown 5, 4, 3, 2, 1
-                const countdown = Math.ceil(5 - redirectTimer);
-                const countdownFontSize = Math.floor(minSide * 0.15);
-                countdownElement.style.fontSize = countdownFontSize + 'px';
-                countdownElement.textContent = countdown.toString();
-                countdownElement.style.opacity = '1';
-            } else {
-                // Black screen after countdown reaches 1
-                countdownElement.style.opacity = '0';
-                // Draw black rectangle over everything
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, state.size.w, state.size.h);
-            }
-        } else {
-            countdownElement.style.opacity = '0';
+        // Fade to black before redirect
+        if (revealProgress >= 1 && redirectTimer >= 5 && redirectTimer < 6) {
+            // Black screen after countdown reaches 1
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, state.size.w, state.size.h);
         }
 
         requestAnimationFrame(loop);
