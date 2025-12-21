@@ -2,6 +2,7 @@
     'use strict';
 
     const canvas = document.getElementById('game');
+    canvas.style.zIndex = '200';
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     // Offscreen ink layer (black) we will erase to reveal red base
     let inkCanvas = document.createElement('canvas');
@@ -27,7 +28,7 @@
     const state = { size: { w: 0, h: 0, dpr: 1 } };
 
     function resize() {
-        const dpr = Math.min(2, window.devicePixelRatio || 1); // Cap at 2 for performance
+        const dpr = Math.min(1.5, window.devicePixelRatio || 1); // Cap at 2 for performance
         const cw = Math.floor(window.innerWidth);
         const ch = Math.floor(window.innerHeight);
         canvas.style.width = cw + 'px';
@@ -103,9 +104,9 @@
             this.pos = new Vec2(state.size.w / 2, state.size.h / 2);
             this.vel = new Vec2(0, 0);
             this.size = 42;
-            this.accel = 900;   // acceleration toward input direction (px/s^2)
+            this.accel = 1000;   // acceleration toward input direction (px/s^2)
             this.maxSpeed = 500; // clamp top speed
-            this.drag = 3.5;     // damping coefficient (1/s), lower = more glide
+            this.drag = 2.5;     // damping coefficient (1/s), lower = more glide
         }
         update(dt, input, allowInput = true) {
             // Check for direct pointer control first
@@ -188,6 +189,9 @@
     let albumsOpacity = 0; // Opacity for album grid fade-in
     let albumsLoaded = 0; // Track how many album images have loaded
     let selectedAlbumIndex = null; // Track which album is currently focused (null = grid view)
+
+    // Animation state for countdown orbit
+    let orbitAngle = 0; // Current angle for orbit rotation
 
     // 6 most recent albums from fngrnctr.bandcamp.com
     const albums = [
@@ -281,6 +285,13 @@
         }
     ];
 
+    // Initialize orbit animation data after albums array is defined
+    const albumOrbitData = albums.map((_, i) => ({
+        angleOffset: (i / albums.length) * Math.PI * 2, // Evenly space albums around circle
+        rotationX: 0,
+        rotationY: 0
+    }));
+
     // Create HTML elements for album art (avoids CORS canvas issues)
     const albumContainer = document.createElement('div');
     albumContainer.id = 'album-container';
@@ -308,6 +319,24 @@
         transition: opacity 0.3s ease;
     `;
     document.body.appendChild(playerContainer);
+
+    // Create countdown display element (z-index above albums)
+    const countdownElement = document.createElement('div');
+    countdownElement.id = 'countdown-display';
+    countdownElement.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 500;
+        color: #fff;
+        font-family: Impact, Haettenschweiler, 'Arial Black', sans-serif;
+        font-weight: bold;
+        text-align: center;
+        pointer-events: none;
+        opacity: 0;
+    `;
+    document.body.appendChild(countdownElement);
 
     const albumElements = albums.map((album, i) => {
         const link = document.createElement('a');
@@ -544,26 +573,87 @@
                 const minMargin = Math.max(50, fontSize * 0.5);
                 const targetY = minMargin + fontSize / 2;
                 textYOffset = (state.size.h / 2 - targetY) * eased;
+
+                // Show albums rising with text, evenly spaced across text width
+                const albumSize = Math.min(120, minSide * 0.15);
+                ctx.measureText('FNGRNCTR');
+                const textWidth = ctx.measureText('FNGRNCTR').width;
+                const textCenterX = state.size.w / 2;
+                const textStartX = textCenterX - textWidth / 2;
+                const currentTextY = state.size.h / 2 - textYOffset;
+                const albumY = currentTextY + fontSize * 1.2; // Position below text with more space
+
+                albumElements.forEach((elem, i) => {
+                    // Spread from left edge to right edge of text (albums evenly distributed)
+                    const x = textStartX + (i / (albums.length - 1)) * (textWidth - albumSize);
+                    const startY = state.size.h + 100; // Start completely below screen
+                    const y = startY + (albumY - startY) * eased;
+
+                    elem.style.left = Math.round(x) + 'px';
+                    elem.style.top = Math.round(y) + 'px';
+                    elem.style.width = albumSize + 'px';
+                    elem.style.height = albumSize + 'px';
+                    elem.style.transform = 'none';
+                    elem.style.zIndex = 100 + i;
+                });
+
+                albumContainer.style.opacity = '1';
+                albumContainer.style.pointerEvents = 'none';
             }
-            // Fade in albums after text animation completes
-            if (revealProgress >= 1 && albumsOpacity < 1) {
-                albumsOpacity = Math.min(1, albumsOpacity + dt * 0.8); // Fade in over ~1.25 seconds
-                albumContainer.style.opacity = albumsOpacity;
-                // Enable interactions once fully visible
-                if (albumsOpacity >= 1) {
-                    albumContainer.style.pointerEvents = 'auto';
+            // After text animation completes, show countdown with orbiting albums then redirect
+            if (revealProgress >= 1) {
+                redirectTimer += dt;
+
+                // Show and animate albums during countdown (first 5 seconds)
+                if (redirectTimer < 5) {
+                    // Speed increases as countdown progresses (0.5x to 2.5x speed)
+                    const speedMultiplier = 0.5 + (redirectTimer / 5) * 2;
+                    orbitAngle += dt * 1.5 * speedMultiplier; // Base speed: 1.5 rad/sec
+
+                    const minSide = Math.min(state.size.w, state.size.h);
+                    const albumSize = Math.min(120, minSide * 0.15);
+                    const orbitRadius = Math.min(200, minSide * 0.25);
+                    const centerX = state.size.w / 2;
+                    const centerY = state.size.h / 2;
+
+                    albumElements.forEach((elem, i) => {
+                        const data = albumOrbitData[i];
+                        const angle = orbitAngle + data.angleOffset;
+
+                        // Calculate orbit position
+                        const x = centerX + Math.cos(angle) * orbitRadius - albumSize / 2;
+                        const y = centerY + Math.sin(angle) * orbitRadius - albumSize / 2;
+
+                        elem.style.left = Math.round(x) + 'px';
+                        elem.style.top = Math.round(y) + 'px';
+
+                        // Update rotation for 3D spinning effect
+                        data.rotationY += dt * 180 * speedMultiplier; // Spin on Y axis
+                        data.rotationX = Math.sin(angle * 2) * 15; // Subtle wobble on X axis
+
+                        // Apply sizing and 3D transform
+                        elem.style.width = albumSize + 'px';
+                        elem.style.height = albumSize + 'px';
+                        elem.style.transform = `perspective(1000px) rotateX(${data.rotationX}deg) rotateY(${data.rotationY}deg)`;
+                        elem.style.zIndex = 100 + i;
+                    });
+
+                    albumContainer.style.opacity = '1';
+                    albumContainer.style.pointerEvents = 'none';
+                } else if (redirectTimer >= 5 && redirectTimer < 6) {
+                    // Black screen for 1 second before redirect
+                    albumContainer.style.opacity = '0';
+                } else {
+                    // Hide albums before redirect
+                    albumContainer.style.opacity = '0';
+                }
+
+                if (redirectTimer >= 6) {
+                    console.log('Redirecting to https://www.theknot.com/fngrnctr');
+                    window.location.href = 'https://www.theknot.com/fngrnctr';
+                    return; // Stop the loop after redirect
                 }
             }
-            // After text animation completes, wait 3 seconds then redirect
-            // TEMPORARILY DISABLED - Adding new feature
-            // if (revealProgress >= 1) {
-            //     redirectTimer += dt;
-            //     if (redirectTimer >= 3) {
-            //         console.log('Redirecting to https://www.theknot.com/fngrnctr');
-            //         window.location.href = 'https://www.theknot.com/fngrnctr';
-            //         return; // Stop the loop after redirect
-            //     }
-            // }
         }
 
         // Backdrop text revealed by erasing: "FNGRNCTR" in white Impact
@@ -647,7 +737,25 @@
         // Draw player icon on top
         player.draw(ctx, playerOpacity);
 
-        // Albums are now rendered as HTML elements (see albumContainer)
+        // Update countdown display and fade to black
+        if (revealProgress >= 1 && redirectTimer < 6) {
+            if (redirectTimer < 5) {
+                // Show countdown 5, 4, 3, 2, 1
+                const countdown = Math.ceil(5 - redirectTimer);
+                const countdownFontSize = Math.floor(minSide * 0.15);
+                countdownElement.style.fontSize = countdownFontSize + 'px';
+                countdownElement.textContent = countdown.toString();
+                countdownElement.style.opacity = '1';
+            } else {
+                // Black screen after countdown reaches 1
+                countdownElement.style.opacity = '0';
+                // Draw black rectangle over everything
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, state.size.w, state.size.h);
+            }
+        } else {
+            countdownElement.style.opacity = '0';
+        }
 
         requestAnimationFrame(loop);
     }
