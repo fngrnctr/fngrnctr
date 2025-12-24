@@ -163,14 +163,20 @@
         }
         draw(ctx, opacity = 1) {
             const half = this.size / 2;
+
             if (playerIcon.complete) {
                 ctx.globalAlpha = opacity;
-                ctx.drawImage(playerIcon, Math.round(this.pos.x - half), Math.round(this.pos.y - half), this.size, this.size);
+                ctx.drawImage(playerIcon,
+                    Math.round(this.pos.x - half),
+                    Math.round(this.pos.y - half),
+                    this.size, this.size);
                 ctx.globalAlpha = 1;
             } else {
                 // Fallback to white square while image loads
                 ctx.fillStyle = opacity < 1 ? `rgba(255, 255, 255, ${opacity})` : '#000000ff';
-                ctx.fillRect(Math.round(this.pos.x - half) + 0.5, Math.round(this.pos.y - half) + 0.5, this.size, this.size);
+                ctx.fillRect(Math.round(this.pos.x - half) + 0.5,
+                    Math.round(this.pos.y - half) + 0.5,
+                    this.size, this.size);
             }
         }
     }
@@ -192,6 +198,13 @@
 
     // Animation state for countdown orbit
     let orbitAngle = 0; // Current angle for orbit rotation
+
+    // Jiggle hint state
+    let idleTime = 0; // Track time without interaction
+    let jiggleActive = false; // Whether jiggle animation is active
+    let postJigglePause = 0; // Track pause time after jiggle ends
+    let jiggleCycleCount = 0; // Track number of jiggle cycles (0 = first cycle)
+    const JIGGLE_DELAY = 5.0; // Seconds to wait before starting jiggle
 
     // 6 most recent albums from fngrnctr.bandcamp.com
     const albums = [
@@ -693,10 +706,74 @@
 
         player.update(dt, input, !isRevealed);
 
+        // Apply jiggle movement to actual player position
+        if (jiggleActive && !hasInteracted) {
+            const time = Date.now() / 1000;
+            const freq = 4.0;
+            const jiggleDuration = idleTime;
+            // Max amplitude increases with each cycle: 2px -> 4px -> 6px
+            const maxAmplitudeForCycle = Math.min(6.0, 2.0 + jiggleCycleCount * 2.0);
+            const amplitude = Math.min(maxAmplitudeForCycle, 1.0 + Math.floor(jiggleDuration / 0.5));
+
+            // Apply small velocity changes to create jiggle movement
+            const jiggleVelX = Math.cos(time * freq) * amplitude * 20; // Velocity component
+            const jiggleVelY = Math.sin(time * freq * 1.5) * amplitude * 16;
+            player.vel.x = jiggleVelX;
+            player.vel.y = jiggleVelY;
+
+            idleTime += dt;
+
+            // Duration increases with each cycle: 1s -> 2s -> 3s
+            const jiggleDurationForCycle = Math.min(3.0, 1.0 + jiggleCycleCount);
+
+            // Stop jiggling after duration
+            if (idleTime >= jiggleDurationForCycle) {
+                jiggleActive = false;
+                idleTime = 0;
+                postJigglePause = 0;
+                jiggleCycleCount++; // Increment cycle count for next jiggle
+            }
+        }
+
         // Erase only after first interaction/movement so no red shows initially
         const speed = player.vel.len();
-        const isActive = input.pointerActive || input.keys.size > 0 || speed > 0.1;
-        if (!hasInteracted && isActive) hasInteracted = true;
+        // Only count actual user input as active, not jiggle movement or coasting
+        const userInput = input.pointerActive || input.keys.size > 0;
+        const isActive = userInput;
+        if (!hasInteracted && isActive) {
+            hasInteracted = true;
+            // Immediately stop any active jiggle when user interacts
+            if (jiggleActive) {
+                jiggleActive = false;
+                idleTime = 0;
+                postJigglePause = 0;
+                jiggleCycleCount = 0; // Reset cycle count
+            }
+        }
+
+        // Jiggle hint logic: start after delay if no interaction, stop when interacting
+        if (!hasInteracted && !isActive) {
+            // Check if player is at rest (very low velocity)
+            const isAtRest = speed < 0.1;
+
+            if (isAtRest && !jiggleActive) {
+                postJigglePause += dt;
+
+                // Start jiggling after delay
+                if (postJigglePause >= JIGGLE_DELAY) {
+                    jiggleActive = true;
+                    idleTime = 0; // Reset for tracking jiggle duration
+                    postJigglePause = 0;
+                }
+            }
+        } else if (isActive) {
+            if (jiggleActive) {
+                jiggleActive = false;
+            }
+            idleTime = 0;
+            postJigglePause = 0;
+            jiggleCycleCount = 0; // Reset cycle count on interaction
+        }
 
         // Check reveal percentage only when not revealed, when active, and throttled to every 5 frames
         if (!isRevealed && hasInteracted && isActive && frameCount % 5 === 0) {
@@ -707,9 +784,10 @@
         }
 
         // Re-ink only when idle, so revealed text persists while moving
-        if (hasInteracted && !isRevealed) {
+        // Also apply during jiggle cycle when not actively jiggling
+        if ((hasInteracted || postJigglePause > 0 || idleTime > 0) && !isRevealed) {
             // Track accumulation to accelerate fade as we approach full coverage
-            if (isActive) {
+            if (isActive || jiggleActive) {
                 inkAccumulator = 0; // Reset when actively erasing
             } else {
                 inkAccumulator += dt;
@@ -736,6 +814,11 @@
             }
         }
 
+        // Don't re-ink during jiggle animation (allow text to be revealed)
+        if (jiggleActive && !hasInteracted) {
+            inkAccumulator = 0; // Keep accumulator at zero during jiggle
+        }
+
         if (hasInteracted && isActive && !isRevealed) {
             // Soft-edge circular brush with radius based on speed
             const base = player.size * 0.45; // smaller base brush
@@ -744,6 +827,23 @@
             const sNorm = Math.min(1, speed / (player.maxSpeed || 400));
             const ease = Math.sqrt(sNorm); // faster early growth, slower near cap
             const radius = Math.max(18, base + ease * (maxScreenRadius - base));
+
+            inkCtx.globalCompositeOperation = 'destination-out';
+            const g = inkCtx.createRadialGradient(player.pos.x, player.pos.y, 0, player.pos.x, player.pos.y, radius);
+            g.addColorStop(0.0, 'rgba(0,0,0,1.0)');
+            g.addColorStop(0.6, 'rgba(0,0,0,0.15)');
+            g.addColorStop(1.0, 'rgba(0,0,0,0)');
+            inkCtx.fillStyle = g;
+            inkCtx.beginPath();
+            inkCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
+            inkCtx.fill();
+            inkCtx.globalCompositeOperation = 'source-over';
+        }
+
+        // Erase during jiggle animation (player is actually moving)
+        if (jiggleActive && !hasInteracted && !isRevealed) {
+            const base = player.size * 0.45;
+            const radius = Math.max(18, base);
 
             inkCtx.globalCompositeOperation = 'destination-out';
             const g = inkCtx.createRadialGradient(player.pos.x, player.pos.y, 0, player.pos.x, player.pos.y, radius);

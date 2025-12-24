@@ -81,3 +81,27 @@ body {
 .help-button.hidden {
     display: none;
 }
+
+@keyframes subtle-jiggle {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+
+    25% {
+        transform: translate(-1px, 0);
+    }
+
+    50% {
+        transform: translate(1px, 0);
+    }
+
+    75% {
+        transform: translate(0, -1px);
+    }
+}
+
+.jiggle-hint {
+    animation: subtle-jiggle 0.6s ease-in-out infinite;
+}
