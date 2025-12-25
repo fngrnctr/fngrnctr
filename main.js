@@ -698,7 +698,6 @@
                 }
 
                 if (redirectTimer >= 6) {
-                    console.log('Redirecting to https://www.theknot.com/fngrnctr');
                     window.location.href = 'https://www.theknot.com/fngrnctr';
                     return; // Stop the loop after redirect
                 }
@@ -798,58 +797,57 @@
         const reinkCondition = (hasInteracted || postJigglePause > 0 || idleTime > 0) && !isRevealed;
 
         if (reinkCondition) {
-            // Always check for pixels that need to fade, regardless of player activity
-            const now = Date.now();
-            const fadeDelay = 3000; // 4 seconds after last reveal
-            const fadeDuration = 4500; // Fade over 6 seconds
+            // Skip expensive pixel processing while actively erasing for smoother mobile performance
+            if (!isActive) {
+                // Check for pixels that need to fade
+                const now = Date.now();
+                const fadeDelay = 3000; // 4 seconds after last reveal
+                const fadeDuration = 4500; // Fade over 6 seconds
 
-            // Calculate fade rate from duration (opacity units per second)
-            const fadeRate = 255 / (fadeDuration / 1000);
+                // Calculate fade rate from duration (opacity units per second)
+                const fadeRate = 255 / (fadeDuration / 1000);
 
-            // Get timestamp and ink data
-            const tsData = timestampCtx.getImageData(0, 0, timestampCanvas.width, timestampCanvas.height);
-            const tsPixels = tsData.data;
-            const inkData = inkCtx.getImageData(0, 0, inkCanvas.width, inkCanvas.height);
-            const inkPixels = inkData.data;
+                // Get timestamp and ink data
+                const tsData = timestampCtx.getImageData(0, 0, timestampCanvas.width, timestampCanvas.height);
+                const tsPixels = tsData.data;
+                const inkData = inkCtx.getImageData(0, 0, inkCanvas.width, inkCanvas.height);
+                const inkPixels = inkData.data;
 
-            let anyFading = false;
+                let anyFading = false;
 
-            for (let i = 0; i < tsPixels.length; i += 4) {
-                // Skip fully opaque pixels for performance
-                if (inkPixels[i + 3] === 255) continue;
+                for (let i = 0; i < tsPixels.length; i += 4) {
+                    // Skip fully opaque pixels for performance
+                    if (inkPixels[i + 3] === 255) continue;
 
-                // Decode 32-bit timestamp from RGBA (in milliseconds)
-                const timestamp = (tsPixels[i] << 24) | (tsPixels[i + 1] << 16) | (tsPixels[i + 2] << 8) | tsPixels[i + 3];
+                    // Decode 32-bit timestamp from RGBA (in milliseconds)
+                    const timestamp = (tsPixels[i] << 24) | (tsPixels[i + 1] << 16) | (tsPixels[i + 2] << 8) | tsPixels[i + 3];
 
-                if (timestamp > 0) {
-                    const timeSinceReveal = now - timestamp;
+                    if (timestamp > 0) {
+                        const timeSinceReveal = now - timestamp;
 
-                    if (timeSinceReveal > fadeDelay) {
-                        anyFading = true;
-                        // Calculate fade progress for this pixel
-                        const fadeTime = timeSinceReveal - fadeDelay;
-                        const fadeProgress = Math.min(1.0, fadeTime / fadeDuration);
+                        if (timeSinceReveal > fadeDelay) {
+                            anyFading = true;
+                            // Calculate fade progress for this pixel
+                            const fadeTime = timeSinceReveal - fadeDelay;
+                            const fadeProgress = Math.min(1.0, fadeTime / fadeDuration);
 
-                        // Quadratic easing for acceleration
-                        const easedProgress = fadeProgress * fadeProgress;
+                            // Quadratic easing for acceleration
+                            const easedProgress = fadeProgress * fadeProgress;
 
-                        // Target opacity (0 = transparent, 255 = black)
-                        const targetAlpha = Math.floor(easedProgress * 255);
+                            // Target opacity (0 = transparent, 255 = black)
+                            const targetAlpha = Math.floor(easedProgress * 255);
 
-                        // Gradually increase alpha towards target (fade back to black)
-                        if (inkPixels[i + 3] < targetAlpha) {
-                            inkPixels[i + 3] = Math.min(255, inkPixels[i + 3] + Math.ceil(dt * fadeRate));
+                            // Gradually increase alpha towards target (fade back to black)
+                            if (inkPixels[i + 3] < targetAlpha) {
+                                inkPixels[i + 3] = Math.min(255, inkPixels[i + 3] + Math.ceil(dt * fadeRate));
+                            }
                         }
                     }
                 }
-            }
 
-            if (anyFading) {
-                inkCtx.putImageData(inkData, 0, 0);
-            }
-
-            if (frameCount % 60 === 0 && anyFading) {
-                console.log(`Spatial fade active`);
+                if (anyFading) {
+                    inkCtx.putImageData(inkData, 0, 0);
+                }
             }
 
             // Track idle time for full reset
@@ -860,7 +858,6 @@
 
                 // Full reset after sufficient idle time
                 if (inkAccumulator > 4.5 && inkAccumulator < 4.6) {
-                    console.log(`Final fill at accumulator=${inkAccumulator.toFixed(2)}s`);
                     inkCtx.globalAlpha = 1;
                     inkCtx.fillStyle = '#000';
                     inkCtx.fillRect(0, 0, state.size.w, state.size.h);
