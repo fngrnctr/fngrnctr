@@ -7,6 +7,9 @@
     // Offscreen ink layer (black) we will erase to reveal red base
     let inkCanvas = document.createElement('canvas');
     let inkCtx = inkCanvas.getContext('2d', { alpha: true, willReadFrequently: true });
+    // Timestamp canvas to track when each pixel was last revealed
+    let timestampCanvas = document.createElement('canvas');
+    let timestampCtx = timestampCanvas.getContext('2d', { alpha: false });
 
     // Load player icon image
     const playerIcon = new Image();
@@ -45,6 +48,13 @@
         inkCtx.clearRect(0, 0, cw, ch);
         inkCtx.fillStyle = '#000';
         inkCtx.fillRect(0, 0, cw, ch);
+
+        // Prepare timestamp canvas
+        timestampCanvas.width = canvas.width;
+        timestampCanvas.height = canvas.height;
+        timestampCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        timestampCtx.fillStyle = '#000';
+        timestampCtx.fillRect(0, 0, cw, ch);
     }
     window.addEventListener('resize', resize, { passive: true });
     resize();
@@ -778,39 +788,83 @@
         // Check reveal percentage only when not revealed, when active, and throttled to every 5 frames
         if (!isRevealed && hasInteracted && isActive && frameCount % 5 === 0) {
             const revealPct = calculateRevealPercentage();
-            if (revealPct >= 0.98) {
+            if (revealPct >= 0.95) {
                 isRevealed = true;
             }
         }
 
         // Re-ink only when idle, so revealed text persists while moving
         // Also apply during jiggle cycle when not actively jiggling
-        if ((hasInteracted || postJigglePause > 0 || idleTime > 0) && !isRevealed) {
-            // Track accumulation to accelerate fade as we approach full coverage
-            if (isActive || jiggleActive) {
-                inkAccumulator = 0; // Reset when actively erasing
-            } else {
-                inkAccumulator += dt;
+        const reinkCondition = (hasInteracted || postJigglePause > 0 || idleTime > 0) && !isRevealed;
+
+        if (reinkCondition) {
+            // Always check for pixels that need to fade, regardless of player activity
+            const now = Date.now();
+            const fadeDelay = 3000; // 4 seconds after last reveal
+            const fadeDuration = 4500; // Fade over 6 seconds
+
+            // Calculate fade rate from duration (opacity units per second)
+            const fadeRate = 255 / (fadeDuration / 1000);
+
+            // Get timestamp and ink data
+            const tsData = timestampCtx.getImageData(0, 0, timestampCanvas.width, timestampCanvas.height);
+            const tsPixels = tsData.data;
+            const inkData = inkCtx.getImageData(0, 0, inkCanvas.width, inkCanvas.height);
+            const inkPixels = inkData.data;
+
+            let anyFading = false;
+
+            for (let i = 0; i < tsPixels.length; i += 4) {
+                // Decode 32-bit timestamp from RGBA (in milliseconds)
+                const timestamp = (tsPixels[i] << 24) | (tsPixels[i + 1] << 16) | (tsPixels[i + 2] << 8) | tsPixels[i + 3];
+
+                if (timestamp > 0) {
+                    const timeSinceReveal = now - timestamp;
+
+                    if (timeSinceReveal > fadeDelay) {
+                        anyFading = true;
+                        // Calculate fade progress for this pixel
+                        const fadeTime = timeSinceReveal - fadeDelay;
+                        const fadeProgress = Math.min(1.0, fadeTime / fadeDuration);
+
+                        // Quadratic easing for acceleration
+                        const easedProgress = fadeProgress * fadeProgress;
+
+                        // Target opacity (0 = transparent, 255 = black)
+                        const targetAlpha = Math.floor(easedProgress * 255);
+
+                        // Gradually increase alpha towards target (fade back to black)
+                        if (inkPixels[i + 3] < targetAlpha) {
+                            inkPixels[i + 3] = Math.min(255, inkPixels[i + 3] + Math.ceil(dt * fadeRate));
+                        }
+                    }
+                }
             }
 
-            // Accelerate re-ink rate based on how long we've been idle
-            // Starts at 1.0, ramps up exponentially to ensure full coverage
-            const baseRate = 0.3; // opacity per second; lower = slower initial fade
-            const boost = Math.min(8, 1 + inkAccumulator * 10.0); // gradual acceleration
-            const reinkRate = baseRate * boost;
-            const alphaStep = Math.min(1, reinkRate * dt);
+            if (anyFading) {
+                inkCtx.putImageData(inkData, 0, 0);
+            }
 
-            inkCtx.globalCompositeOperation = 'source-over';
-            inkCtx.globalAlpha = alphaStep;
-            inkCtx.fillStyle = '#000';
-            inkCtx.fillRect(0, 0, state.size.w, state.size.h);
-            inkCtx.globalAlpha = 1;
-            inkCtx.globalCompositeOperation = 'source-over';
+            if (frameCount % 60 === 0 && anyFading) {
+                console.log(`Spatial fade active`);
+            }
 
-            // Ensure complete coverage after sufficient idle time
-            if (inkAccumulator > 2) {
-                inkCtx.fillStyle = '#000';
-                inkCtx.fillRect(0, 0, state.size.w, state.size.h);
+            // Track idle time for full reset
+            if (isActive || jiggleActive) {
+                inkAccumulator = 0;
+            } else {
+                inkAccumulator += dt;
+
+                // Full reset after sufficient idle time
+                if (inkAccumulator > 4.5 && inkAccumulator < 4.6) {
+                    console.log(`Final fill at accumulator=${inkAccumulator.toFixed(2)}s`);
+                    inkCtx.globalAlpha = 1;
+                    inkCtx.fillStyle = '#000';
+                    inkCtx.fillRect(0, 0, state.size.w, state.size.h);
+                    timestampCtx.fillStyle = '#000';
+                    timestampCtx.fillRect(0, 0, state.size.w, state.size.h);
+                    inkAccumulator = 0;
+                }
             }
         }
 
@@ -821,8 +875,8 @@
 
         if (hasInteracted && isActive && !isRevealed) {
             // Soft-edge circular brush with radius based on speed
-            const base = player.size * 0.45; // smaller base brush
-            const maxScreenRadius = Math.min(state.size.w, state.size.h) * 0.12; // smaller cap
+            const base = player.size * 0.55; // base brush size
+            const maxScreenRadius = Math.min(state.size.w, state.size.h) * 0.15; // max radius cap
             // Normalize speed to 0..1; use gentle easing to avoid huge sizes
             const sNorm = Math.min(1, speed / (player.maxSpeed || 400));
             const ease = Math.sqrt(sNorm); // faster early growth, slower near cap
@@ -838,12 +892,26 @@
             inkCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
             inkCtx.fill();
             inkCtx.globalCompositeOperation = 'source-over';
+
+            // Record timestamp when this pixel was revealed (encode 32-bit timestamp in RGBA)
+            // Use destination-over so we only write to pixels that don't already have a timestamp
+            const now = Date.now();
+            const r = (now >>> 24) & 0xFF;
+            const g_val = (now >>> 16) & 0xFF;
+            const b = (now >>> 8) & 0xFF;
+            const a = now & 0xFF;
+            timestampCtx.globalCompositeOperation = 'destination-over'; // Don't overwrite existing timestamps
+            timestampCtx.fillStyle = `rgba(${r},${g_val},${b},${a / 255})`;
+            timestampCtx.beginPath();
+            timestampCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
+            timestampCtx.fill();
+            timestampCtx.globalCompositeOperation = 'source-over';
         }
 
         // Erase during jiggle animation (player is actually moving)
         if (jiggleActive && !hasInteracted && !isRevealed) {
-            const base = player.size * 0.45;
-            const radius = Math.max(18, base);
+            const base = player.size * 0.55;
+            const radius = Math.max(22, base);
 
             inkCtx.globalCompositeOperation = 'destination-out';
             const g = inkCtx.createRadialGradient(player.pos.x, player.pos.y, 0, player.pos.x, player.pos.y, radius);
@@ -855,6 +923,19 @@
             inkCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
             inkCtx.fill();
             inkCtx.globalCompositeOperation = 'source-over';
+
+            // Record timestamp (only for newly revealed pixels)
+            const now = Date.now();
+            const r = (now >>> 24) & 0xFF;
+            const g_val = (now >>> 16) & 0xFF;
+            const b = (now >>> 8) & 0xFF;
+            const a = now & 0xFF;
+            timestampCtx.globalCompositeOperation = 'destination-over';
+            timestampCtx.fillStyle = `rgba(${r},${g_val},${b},${a / 255})`;
+            timestampCtx.beginPath();
+            timestampCtx.arc(player.pos.x, player.pos.y, radius, 0, Math.PI * 2);
+            timestampCtx.fill();
+            timestampCtx.globalCompositeOperation = 'source-over';
         }
 
         // Composite ink layer onto main canvas (remaining black)
