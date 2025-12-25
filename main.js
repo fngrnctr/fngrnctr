@@ -31,7 +31,7 @@
     const state = { size: { w: 0, h: 0, dpr: 1 } };
 
     function resize() {
-        const dpr = Math.min(1.5, window.devicePixelRatio || 1); // Cap at 2 for performance
+        const dpr = Math.min(1.5, window.devicePixelRatio || 1); // Cap for performance
         const cw = Math.floor(window.innerWidth);
         const ch = Math.floor(window.innerHeight);
         canvas.style.width = cw + 'px';
@@ -815,6 +815,9 @@
             let anyFading = false;
 
             for (let i = 0; i < tsPixels.length; i += 4) {
+                // Skip fully opaque pixels for performance
+                if (inkPixels[i + 3] === 255) continue;
+
                 // Decode 32-bit timestamp from RGBA (in milliseconds)
                 const timestamp = (tsPixels[i] << 24) | (tsPixels[i + 1] << 16) | (tsPixels[i + 2] << 8) | tsPixels[i + 3];
 
