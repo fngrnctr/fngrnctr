@@ -602,6 +602,11 @@
                 fadeDelay += dt;
                 // Fade player out over 2 seconds
                 playerOpacity = Math.max(0, 1 - (fadeDelay / 2));
+                // Fade instructional text at same rate
+                const instructions = document.getElementById('instructions');
+                if (instructions) {
+                    instructions.style.opacity = playerOpacity;
+                }
                 // Gradually reveal remaining ink over same 2 seconds
                 const revealAmount = fadeDelay / 2; // 0 to 1 over 2 seconds
                 inkCtx.globalCompositeOperation = 'destination-out';
