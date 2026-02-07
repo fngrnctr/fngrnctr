@@ -703,7 +703,7 @@
                 }
 
                 if (redirectTimer >= 6) {
-                    window.location.href = 'https://www.theknot.com/fngrnctr';
+                    window.location.href = 'https://fngrnctr.bandcamp.com';
                     return; // Stop the loop after redirect
                 }
             }
