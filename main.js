@@ -15,6 +15,10 @@
     const playerIcon = new Image();
     playerIcon.src = 'nectar-preview.png';
 
+    // Load revealed image
+    const cloudsImage = new Image();
+    cloudsImage.src = 'clouds.png';
+
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
     class Vec2 {
@@ -639,18 +643,17 @@
                 const targetY = minMargin + fontSize / 2;
                 textYOffset = (state.size.h / 2 - targetY) * eased;
 
-                // Show albums rising with text, evenly spaced across text width
+                // Show albums rising with image, evenly spaced across image width
                 const albumSize = Math.min(120, minSide * 0.15);
-                ctx.measureText('FNGRNCTR');
-                const textWidth = ctx.measureText('FNGRNCTR').width;
+                const imageWidth = fontSize * 3; // Approximate width based on image aspect ratio
                 const textCenterX = state.size.w / 2;
-                const textStartX = textCenterX - textWidth / 2;
+                const textStartX = textCenterX - imageWidth / 2;
                 const currentTextY = state.size.h / 2 - textYOffset;
-                const albumY = currentTextY + fontSize * 1.2; // Position below text with more space
+                const albumY = currentTextY + fontSize * 1.2; // Position below image with more space
 
                 albumElements.forEach((elem, i) => {
-                    // Spread from left edge to right edge of text (albums evenly distributed)
-                    const x = textStartX + (i / (albums.length - 1)) * (textWidth - albumSize);
+                    // Spread from left edge to right edge of image (albums evenly distributed)
+                    const x = textStartX + (i / (albums.length - 1)) * (imageWidth - albumSize);
                     const startY = state.size.h + 100; // Start completely below screen
                     const y = startY + (albumY - startY) * eased;
 
@@ -720,14 +723,18 @@
             }
         }
 
-        // Backdrop text revealed by erasing: "FNGRNCTR" in white Impact
+        // Backdrop image revealed by erasing: clouds.png with transparency preserved
         const minSide = Math.min(state.size.w, state.size.h);
         const fontSize = Math.floor(minSide * 0.22);
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = `${fontSize}px Impact, Haettenschweiler, 'Arial Black', sans-serif`;
-        ctx.fillText('FNGRNCTR', state.size.w / 2, state.size.h / 2 - textYOffset);
+
+        // Draw the clouds image if loaded
+        if (cloudsImage.complete && cloudsImage.naturalWidth > 0) {
+            const imageHeight = fontSize;
+            const imageWidth = (cloudsImage.naturalWidth / cloudsImage.naturalHeight) * imageHeight;
+            const x = state.size.w / 2 - imageWidth / 2;
+            const y = state.size.h / 2 - textYOffset - imageHeight / 2;
+            ctx.drawImage(cloudsImage, x, y, imageWidth, imageHeight);
+        }
 
         player.update(dt, input, !isRevealed);
 
