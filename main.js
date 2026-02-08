@@ -216,8 +216,19 @@
     let jiggleCycleCount = 0; // Track number of jiggle cycles (0 = first cycle)
     const JIGGLE_DELAY = 5.0; // Seconds to wait before starting jiggle
 
-    // 6 most recent albums from fngrnctr.bandcamp.com
+    // All albums from fngrnctr.bandcamp.com
     const albums = [
+        {
+            title: 'Nectarville, USA',
+            url: 'https://fngrnctr.bandcamp.com/album/nectarville-usa',
+            artUrl: 'https://f4.bcbits.com/img/a0368239433_10.jpg',
+            tracks: [
+                { name: 'Scooter', url: 'https://fngrnctr.bandcamp.com/track/scooter', duration: '03:33' },
+                { name: 'Tum Tum Chicken', url: 'https://fngrnctr.bandcamp.com/track/tum-tum-chicken', duration: '02:44' },
+                { name: 'Gas Day', url: 'https://fngrnctr.bandcamp.com/track/gas-day', duration: '03:20' },
+                { name: 'School Dance', url: 'https://fngrnctr.bandcamp.com/track/school-dance', duration: '02:52' }
+            ]
+        },
         {
             title: 'Ruby',
             url: 'https://fngrnctr.bandcamp.com/album/ruby',
