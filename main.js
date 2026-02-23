@@ -717,8 +717,8 @@
                 }
 
                 if (redirectTimer >= 6) {
-                    window.location.href = 'https://fngrnctr.bandcamp.com';
-                    return; // Stop the loop after redirect
+                    showSite();
+                    return; // Stop the loop after site is shown
                 }
             }
         }
@@ -977,6 +977,62 @@
         requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
+
+    function showSite() {
+        // Hide game elements
+        canvas.style.display = 'none';
+        albumContainer.style.display = 'none';
+        playerContainer.style.display = 'none';
+
+        // Build album grid
+        const musicSection = document.getElementById('section-music');
+        const grid = document.createElement('div');
+        grid.className = 'album-grid';
+        albums.forEach(album => {
+            const item = document.createElement('a');
+            item.href = album.url;
+            item.target = '_blank';
+            item.rel = 'noopener noreferrer';
+            item.className = 'album-item';
+
+            const img = document.createElement('img');
+            img.src = album.artUrl;
+            img.alt = album.title;
+            img.draggable = false;
+
+            const title = document.createElement('span');
+            title.className = 'album-title';
+            title.textContent = album.title;
+
+            item.appendChild(img);
+            item.appendChild(title);
+            grid.appendChild(item);
+        });
+        musicSection.appendChild(grid);
+
+        // Fade site in
+        const site = document.getElementById('site');
+        site.classList.remove('hidden');
+        requestAnimationFrame(() => site.classList.add('visible'));
+
+        // Nav section switching
+        const navLinks = site.querySelectorAll('[data-section]');
+        const sections = site.querySelectorAll('.site-section');
+
+        function showSection(name) {
+            sections.forEach(s => s.classList.toggle('hidden', s.id !== 'section-' + name));
+            navLinks.forEach(a => a.classList.toggle('active', a.dataset.section === name));
+        }
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', e => {
+                e.preventDefault();
+                showSection(link.dataset.section);
+            });
+        });
+
+        showSection('home');
+    }
 
     window.addEventListener('resize', () => {
         player.pos.set(

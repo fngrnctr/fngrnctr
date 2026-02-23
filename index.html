@@ -27,6 +27,29 @@
 <body>
     <canvas id="game" aria-label="Top-down movement game" role="img"></canvas>
 
+    <!-- Site landing page (revealed after game) -->
+    <div id="site" class="hidden">
+        <nav id="site-nav">
+            <a class="nav-logo" href="#" data-section="home">FNGRNCTR</a>
+            <div class="nav-links">
+                <a href="#" data-section="music">MUSIC</a>
+                <a href="#" data-section="merch">MERCH</a>
+            </div>
+        </nav>
+
+        <div id="section-home" class="site-section">
+            <img src="clouds.png" alt="FNGRNCTR" class="home-hero-img" />
+        </div>
+
+        <div id="section-music" class="site-section hidden">
+            <!-- album grid injected by JS -->
+        </div>
+
+        <div id="section-merch" class="site-section hidden">
+            <p class="coming-soon">Coming soon.</p>
+        </div>
+    </div>
+
     <script defer src="main.js"></script>
 </body>
 
