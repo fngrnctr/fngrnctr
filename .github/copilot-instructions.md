@@ -28,6 +28,7 @@ No framework, no build step — plain HTML/CSS/JS. Three files do everything:
 
 ## Key conventions
 
+- **Never include any person's real name** — in code, comments, commit messages, file contents, or any generated output. Use handles, roles, or anonymous references only.
 - **Vanilla JS only** — no npm, no bundler, no framework
 - **Conventional commits** (`feat:`, `fix:`, `chore:`, etc.)
 - Test locally: `python3 -m http.server 8000` (must use a server, not `file://`, due to image loading)

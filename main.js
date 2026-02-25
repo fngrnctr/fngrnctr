@@ -1100,6 +1100,126 @@
         });
 
         showSection('home');
+        initSpinner();
+    }
+
+    /** Fidget-spinner physics for the home hero image. */
+    function initSpinner() {
+        const wrap = document.querySelector('.spinner-wrap');
+        if (!wrap) return;
+        const img = wrap.querySelector('.home-hero-img');
+
+        // ── State ────────────────────────────────────────────────────────────
+        let angle = 0;       // current rotation, radians
+        let angularVel = 0;       // radians per millisecond
+        let isDragging = false;
+        let lastAngle = 0;       // pointer angle on last move
+        let lastMoveTime = 0;
+        let rafId = null;
+        let lastFrameTime = null;
+
+        // Friction: velocity decays to this fraction each second.
+        // Lower = more resistance. Range guide:
+        //   0.80 → light / floaty   (~12 s coast)
+        //   0.55 → medium           (~6 s coast)
+        //   0.25 → heavy / grippy   (~2 s coast)
+        //   0.10 → nearly instant stop
+        const FRICTION_PER_SEC = 0.45;
+        const MIN_VEL = 0.00005; // rad/ms — below this we stop the loop
+
+        // ── Helpers ──────────────────────────────────────────────────────────
+        function centerOf() {
+            const r = wrap.getBoundingClientRect();
+            return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+        }
+
+        function pointerAngle(e) {
+            const c = centerOf();
+            return Math.atan2(e.clientY - c.y, e.clientX - c.x);
+        }
+
+        /** Shortest signed angular difference a→b, range (−π, π]. */
+        function deltaAngle(a, b) {
+            let d = b - a;
+            if (d > Math.PI) d -= 2 * Math.PI;
+            if (d < -Math.PI) d += 2 * Math.PI;
+            return d;
+        }
+
+        function applyTransform() {
+            img.style.transform = `rotate(${angle}rad)`;
+        }
+
+        // ── Animation loop (free spin) ───────────────────────────────────────
+        function tick(ts) {
+            if (lastFrameTime === null) lastFrameTime = ts;
+            const dt = Math.min(ts - lastFrameTime, 64); // cap to avoid huge jumps
+            lastFrameTime = ts;
+
+            angularVel *= Math.pow(FRICTION_PER_SEC, dt / 1000);
+
+            if (Math.abs(angularVel) < MIN_VEL) {
+                angularVel = 0;
+                rafId = null;
+                return; // stop the loop — no waste
+            }
+
+            angle += angularVel * dt;
+            applyTransform();
+            rafId = requestAnimationFrame(tick);
+        }
+
+        function startLoop() {
+            if (rafId) return;
+            lastFrameTime = null;
+            rafId = requestAnimationFrame(tick);
+        }
+
+        // ── Pointer events ───────────────────────────────────────────────────
+        wrap.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 && e.button !== undefined) return; // left-click / touch only
+            wrap.setPointerCapture(e.pointerId);
+            isDragging = true;
+            lastAngle = pointerAngle(e);
+            lastMoveTime = e.timeStamp;
+            angularVel = 0; // finger grabs and momentarily stops it — realistic!
+            // Cancel free-spin loop while dragging (we'll update synchronously in pointermove)
+            if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+            wrap.classList.add('grabbing');
+            e.preventDefault();
+        }, { passive: false });
+
+        wrap.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const now = e.timeStamp;
+            const curr = pointerAngle(e);
+            const delta = deltaAngle(lastAngle, curr);
+            const dt = Math.max(now - lastMoveTime, 1);
+
+            // Image follows finger exactly — no interpolation lag.
+            angle += delta;
+            applyTransform();
+
+            // Running angular velocity — used for release flick.
+            // Blend 70 % new sample + 30 % old to smooth single-frame noise.
+            angularVel = delta / dt * 0.7 + angularVel * 0.3;
+
+            lastAngle = curr;
+            lastMoveTime = now;
+            e.preventDefault();
+        }, { passive: false });
+
+        function onRelease(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            wrap.classList.remove('grabbing');
+            // If the pointer was stationary for >120 ms before release, kill velocity.
+            if (e.timeStamp - lastMoveTime > 120) angularVel = 0;
+            if (Math.abs(angularVel) > MIN_VEL) startLoop();
+        }
+
+        wrap.addEventListener('pointerup', onRelease);
+        wrap.addEventListener('pointercancel', onRelease);
     }
 
     window.addEventListener('resize', () => {
