@@ -66,6 +66,8 @@
     // Prevent text selection on all touch/mouse events
     document.addEventListener('selectstart', (e) => e.preventDefault());
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Belt-and-suspenders: kill all touch scrolling at the document level
+    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
     class Input {
         constructor() {
@@ -1090,6 +1092,11 @@
                 }
             });
             navLinks.forEach(a => a.classList.toggle('active', a.dataset.section === name));
+
+            // Only allow scrolling on sections that need it; home must stay locked
+            const scrollableSections = ['music'];
+            site.classList.toggle('scrollable', scrollableSections.includes(name));
+            site.scrollTop = 0; // reset scroll position when switching sections
 
             // Update URL hash; home gets a clean URL with no hash
             if (pushState) {
