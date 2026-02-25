@@ -224,6 +224,7 @@
     const merch = [
         {
             name: 'Saved My Life T-shirt',
+            description: 'Did FNGRNCTR save your life? Let the world know.',
             price: '$31.00',
             imageUrl: 'https://f4.bcbits.com/img/0042903607_10.jpg',
             url: 'https://fngrnctr.bandcamp.com/merch/saved-my-life-t-shirt'
@@ -1044,6 +1045,11 @@
             name.className = 'merch-name';
             name.textContent = item.name;
 
+            const desc = document.createElement('span');
+            desc.className = 'merch-desc';
+            desc.textContent = item.description || '';
+            if (!item.description) desc.style.display = 'none';
+
             const price = document.createElement('span');
             price.className = 'merch-price';
             price.textContent = item.price;
@@ -1057,6 +1063,7 @@
 
             card.appendChild(imgWrap);
             card.appendChild(name);
+            card.appendChild(desc);
             card.appendChild(price);
             card.appendChild(cta);
             merchGrid.appendChild(card);
