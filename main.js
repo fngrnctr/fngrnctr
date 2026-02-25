@@ -1094,7 +1094,7 @@
             navLinks.forEach(a => a.classList.toggle('active', a.dataset.section === name));
 
             // Only allow scrolling on sections that need it; home must stay locked
-            const scrollableSections = ['music'];
+            const scrollableSections = ['music', 'merch'];
             site.classList.toggle('scrollable', scrollableSections.includes(name));
             site.scrollTop = 0; // reset scroll position when switching sections
 
