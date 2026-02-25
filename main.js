@@ -220,6 +220,28 @@
     let jiggleCycleCount = 0; // Track number of jiggle cycles (0 = first cycle)
     const JIGGLE_DELAY = 5.0; // Seconds to wait before starting jiggle
 
+    // Merch items — replace placeholders with real data when available
+    const merch = [
+        {
+            name: 'FNGRNCTR Tee',
+            price: '$25.00',
+            imageUrl: null, // replace with image path or URL
+            url: 'https://fngrnctr.bandcamp.com/merch' // replace with individual item URL
+        },
+        {
+            name: 'Nectarville Hoodie',
+            price: '$45.00',
+            imageUrl: null,
+            url: 'https://fngrnctr.bandcamp.com/merch'
+        },
+        {
+            name: 'Sticker Pack',
+            price: '$8.00',
+            imageUrl: null,
+            url: 'https://fngrnctr.bandcamp.com/merch'
+        }
+    ];
+
     // All albums from fngrnctr.bandcamp.com
     const albums = [
         {
@@ -976,7 +998,8 @@
 
         requestAnimationFrame(loop);
     }
-    requestAnimationFrame(loop);
+    // requestAnimationFrame(loop); // temporarily disabled — go straight to site
+    showSite();
 
     function showSite() {
         // Hide game elements
@@ -1009,6 +1032,48 @@
             grid.appendChild(item);
         });
         musicSection.appendChild(grid);
+
+        // Build merch grid
+        const merchSection = document.getElementById('section-merch');
+        merchSection.innerHTML = '';
+        const merchGrid = document.createElement('div');
+        merchGrid.className = 'merch-grid';
+        merch.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'merch-card';
+
+            const imgWrap = document.createElement('div');
+            imgWrap.className = 'merch-img';
+            if (item.imageUrl) {
+                const img = document.createElement('img');
+                img.src = item.imageUrl;
+                img.alt = item.name;
+                img.draggable = false;
+                imgWrap.appendChild(img);
+            }
+
+            const name = document.createElement('span');
+            name.className = 'merch-name';
+            name.textContent = item.name;
+
+            const price = document.createElement('span');
+            price.className = 'merch-price';
+            price.textContent = item.price;
+
+            const cta = document.createElement('a');
+            cta.href = item.url;
+            cta.target = '_blank';
+            cta.rel = 'noopener noreferrer';
+            cta.className = 'merch-cta';
+            cta.textContent = 'BUY →';
+
+            card.appendChild(imgWrap);
+            card.appendChild(name);
+            card.appendChild(price);
+            card.appendChild(cta);
+            merchGrid.appendChild(card);
+        });
+        merchSection.appendChild(merchGrid);
 
         // Fade site in
         const site = document.getElementById('site');
