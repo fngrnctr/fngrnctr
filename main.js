@@ -1119,8 +1119,12 @@
         let lastFrameTime = null;
 
         // Friction: velocity decays to this fraction each second.
-        // ~0.55/s → after 6 s, spinner is at ≈3 % — feels like a real spinner.
-        const FRICTION_PER_SEC = 0.55;
+        // Lower = more resistance. Range guide:
+        //   0.80 → light / floaty   (~12 s coast)
+        //   0.55 → medium           (~6 s coast)
+        //   0.25 → heavy / grippy   (~2 s coast)
+        //   0.10 → nearly instant stop
+        const FRICTION_PER_SEC = 0.45;
         const MIN_VEL = 0.00005; // rad/ms — below this we stop the loop
 
         // ── Helpers ──────────────────────────────────────────────────────────
