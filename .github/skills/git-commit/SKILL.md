@@ -7,6 +7,30 @@ allowed-tools: Bash
 
 # Git Commit with Conventional Commits
 
+## ⚠️ Account Requirement (REQUIRED — check before ANY git or gh operation)
+
+Only the **`fngrnctr`** GitHub account may push branches, create commits, or open/merge pull requests on this repository.
+
+Before running any `git push`, `git commit`, or `gh` command, verify the active account:
+
+```bash
+# Check gh CLI active account
+gh auth status
+
+# Check git's configured remote account (look at the push URL)
+git remote -v
+```
+
+**If `gh auth status` shows any account other than `fngrnctr` as active:**
+
+```bash
+gh auth switch --user fngrnctr
+```
+
+**Do NOT proceed** with any remote operation until `fngrnctr` is confirmed as the active account. Alert the user if a switch is needed.
+
+---
+
 ## Overview
 
 Create standardized, semantic git commits using the Conventional Commits specification. Analyze the actual diff to determine appropriate type, scope, and message.
@@ -135,6 +159,7 @@ This rule has no exceptions — no real names in code, comments, commit messages
 
 ## Git Safety Protocol
 
+- **ONLY the `fngrnctr` account may push or open PRs** — verify with `gh auth status` before every remote operation
 - NEVER update git config
 - NEVER run destructive commands (--force, hard reset) without explicit request
 - NEVER skip hooks (--no-verify) unless user asks
