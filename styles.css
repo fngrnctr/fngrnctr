@@ -203,6 +203,31 @@ body {
     animation: section-fadein 0.25s ease;
 }
 
+/* ── Fidget spinner ───────────────────────────────────────────────────────── */
+
+.spinner-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+    /* don't let the browser intercept scroll/pinch during spin */
+    -webkit-user-drag: none;
+    user-select: none;
+    /* give a bit of breathing room so the grab zone extends past the image */
+    padding: 24px;
+    border-radius: 50%;
+    transition: filter 0.2s;
+}
+
+.spinner-wrap:hover {
+    filter: brightness(1.08);
+}
+
+.spinner-wrap.grabbing {
+    cursor: grabbing;
+}
+
 .home-hero-img {
     width: min(480px, 80vw);
     height: auto;
@@ -210,6 +235,8 @@ body {
     user-select: none;
     -webkit-user-drag: none;
     pointer-events: none;
+    /* will-change hints the browser to composite on its own layer */
+    will-change: transform;
 }
 
 .album-grid {
