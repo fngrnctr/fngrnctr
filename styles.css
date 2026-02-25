@@ -177,6 +177,13 @@ body {
     justify-content: center;
 }
 
+#section-home {
+    height: 100vh;
+    min-height: unset;
+    padding: 90px 0;
+    box-sizing: border-box;
+}
+
 .site-section.hidden {
     display: none;
 }
@@ -193,6 +200,15 @@ body {
 
 .site-section.fadein {
     animation: section-fadein 0.25s ease;
+}
+
+.home-hero-img {
+    width: min(480px, 80vw);
+    height: auto;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
 }
 
 .album-grid {
