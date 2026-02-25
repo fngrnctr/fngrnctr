@@ -1079,7 +1079,7 @@
         const navLinks = site.querySelectorAll('[data-section]');
         const sections = site.querySelectorAll('.site-section');
 
-        function showSection(name) {
+        function showSection(name, pushState = true) {
             sections.forEach(s => {
                 const isTarget = s.id === 'section-' + name;
                 s.classList.toggle('hidden', !isTarget);
@@ -1090,6 +1090,12 @@
                 }
             });
             navLinks.forEach(a => a.classList.toggle('active', a.dataset.section === name));
+
+            // Update URL hash; home gets a clean URL with no hash
+            if (pushState) {
+                const hash = name === 'home' ? '' : '#' + name;
+                history.pushState({ section: name }, '', location.pathname + hash);
+            }
         }
 
         navLinks.forEach(link => {
@@ -1099,7 +1105,19 @@
             });
         });
 
-        showSection('home');
+        // Back/forward button support
+        window.addEventListener('popstate', (e) => {
+            const name = (e.state && e.state.section) || 'home';
+            showSection(name, false);
+        });
+
+        // Respect hash on initial load (e.g. direct link to /#music)
+        const validSections = ['home', 'music', 'merch'];
+        const initialHash = location.hash.replace('#', '');
+        const initialSection = validSections.includes(initialHash) ? initialHash : 'home';
+        // Replace current history entry so popstate has a state object
+        history.replaceState({ section: initialSection }, '', location.pathname + (initialSection === 'home' ? '' : '#' + initialSection));
+        showSection(initialSection, false);
         initSpinner();
     }
 
