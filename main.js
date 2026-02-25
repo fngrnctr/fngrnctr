@@ -1073,7 +1073,15 @@
         const sections = site.querySelectorAll('.site-section');
 
         function showSection(name) {
-            sections.forEach(s => s.classList.toggle('hidden', s.id !== 'section-' + name));
+            sections.forEach(s => {
+                const isTarget = s.id === 'section-' + name;
+                s.classList.toggle('hidden', !isTarget);
+                if (isTarget) {
+                    s.classList.remove('fadein');
+                    void s.offsetWidth; // force reflow to restart animation
+                    s.classList.add('fadein');
+                }
+            });
             navLinks.forEach(a => a.classList.toggle('active', a.dataset.section === name));
         }
 

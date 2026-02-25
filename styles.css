@@ -132,28 +132,29 @@ body {
     right: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 20px 32px;
+    justify-content: center;
+    gap: 32px;
+    padding: 16px 32px;
     z-index: 10;
     background: #000;
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .nav-logo {
-    font-size: 12px;
-    letter-spacing: 0.22em;
-    color: #fff;
+    display: block;
     text-decoration: none;
-    font-weight: 700;
-    text-transform: uppercase;
 }
 
-.nav-links {
-    display: flex;
-    gap: 28px;
+.nav-logo img {
+    display: block;
+    height: 48px;
+    width: auto;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
 }
 
-.nav-links a {
+.nav-link {
     font-size: 11px;
     letter-spacing: 0.18em;
     color: rgba(255, 255, 255, 0.4);
@@ -162,14 +163,14 @@ body {
     transition: color 0.2s;
 }
 
-.nav-links a:hover,
-.nav-links a.active {
+.nav-link:hover,
+.nav-link.active {
     color: #fff;
 }
 
 .site-section {
     min-height: 100vh;
-    padding-top: 65px;
+    padding-top: 90px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -180,13 +181,18 @@ body {
     display: none;
 }
 
-.home-hero-img {
-    width: min(320px, 60vw);
-    height: auto;
-    display: block;
-    user-select: none;
-    -webkit-user-drag: none;
-    pointer-events: none;
+@keyframes section-fadein {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.site-section.fadein {
+    animation: section-fadein 0.25s ease;
 }
 
 .album-grid {
