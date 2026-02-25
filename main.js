@@ -220,25 +220,13 @@
     let jiggleCycleCount = 0; // Track number of jiggle cycles (0 = first cycle)
     const JIGGLE_DELAY = 5.0; // Seconds to wait before starting jiggle
 
-    // Merch items — replace placeholders with real data when available
+    // Merch items
     const merch = [
         {
-            name: 'FNGRNCTR Tee',
-            price: '$25.00',
-            imageUrl: null, // replace with image path or URL
-            url: 'https://fngrnctr.bandcamp.com/merch' // replace with individual item URL
-        },
-        {
-            name: 'Nectarville Hoodie',
-            price: '$45.00',
-            imageUrl: null,
-            url: 'https://fngrnctr.bandcamp.com/merch'
-        },
-        {
-            name: 'Sticker Pack',
-            price: '$8.00',
-            imageUrl: null,
-            url: 'https://fngrnctr.bandcamp.com/merch'
+            name: 'Saved My Life T-shirt',
+            price: '$31.00',
+            imageUrl: 'https://f4.bcbits.com/img/0042903607_10.jpg',
+            url: 'https://fngrnctr.bandcamp.com/merch/saved-my-life-t-shirt'
         }
     ];
 
