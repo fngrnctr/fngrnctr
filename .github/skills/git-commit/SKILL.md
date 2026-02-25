@@ -114,6 +114,25 @@ EOF
 - Imperative mood: "fix bug" not "fixes bug"
 - Keep description under 72 characters
 
+## Privacy Check (REQUIRED before every commit)
+
+Before staging or committing, scan the diff for any real person's name:
+
+```bash
+# Check staged changes for names
+git diff --staged | grep -iE '\b[A-Z][a-z]+ [A-Z][a-z]+\b'
+
+# Also check tracked file contents being added
+git diff --staged --name-only | xargs grep -iE '\b[A-Z][a-z]+ [A-Z][a-z]+\b' 2>/dev/null
+```
+
+**If any name is found:**
+- Do NOT proceed with the commit
+- Alert the user immediately with the file/line containing the name
+- Ask the user to remove or replace it with a handle, role, or anonymous reference
+
+This rule has no exceptions — no real names in code, comments, commit messages, or file contents.
+
 ## Git Safety Protocol
 
 - NEVER update git config
