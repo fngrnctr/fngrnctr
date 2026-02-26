@@ -66,8 +66,6 @@
     // Prevent text selection on all touch/mouse events
     document.addEventListener('selectstart', (e) => e.preventDefault());
     document.addEventListener('contextmenu', (e) => e.preventDefault());
-    // Belt-and-suspenders: kill all touch scrolling at the document level
-    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
     class Input {
         constructor() {
