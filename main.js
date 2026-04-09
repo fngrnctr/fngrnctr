@@ -227,7 +227,15 @@
             description: 'Did FNGRNCTR save your life? Let the world know.',
             price: '$31.00',
             imageUrl: 'https://f4.bcbits.com/img/0042903607_10.jpg',
-            url: 'https://fngrnctr.bandcamp.com/merch/saved-my-life-t-shirt'
+            url: 'https://fngrnctr.bandcamp.com/merch/saved-my-life-t-shirt',
+            uppercase: true
+        },
+        {
+            name: 'cool-kid_01 (KeNFT)',
+            description: 'First pressing of 14 billion. From the "Ken\'s Coolest" collection.',
+            price: '31 ETH',
+            imageUrl: 'https://i2c.seadn.io/ethereum/0x495f947276749ce646f68ac8c248420045cb7b5e/e69d71dda3c7d45a8d1ed3aa238369/b5e69d71dda3c7d45a8d1ed3aa238369.jpeg?w=1000',
+            url: 'https://opensea.io/item/ethereum/0x495f947276749ce646f68ac8c248420045cb7b5e/26061901186007371607264970581182361421104974378862169005074243448716214140929'
         }
     ];
 
@@ -1031,8 +1039,11 @@
             const card = document.createElement('div');
             card.className = 'merch-card';
 
-            const imgWrap = document.createElement('div');
+            const imgWrap = document.createElement('a');
             imgWrap.className = 'merch-img';
+            imgWrap.href = item.url;
+            imgWrap.target = '_blank';
+            imgWrap.rel = 'noopener noreferrer';
             if (item.imageUrl) {
                 const img = document.createElement('img');
                 img.src = item.imageUrl;
@@ -1043,6 +1054,7 @@
 
             const name = document.createElement('span');
             name.className = 'merch-name';
+            if (item.uppercase) name.style.textTransform = 'uppercase';
             name.textContent = item.name;
 
             const desc = document.createElement('span');
