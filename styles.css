@@ -216,6 +216,8 @@ body {
 /* ── Fidget spinner ───────────────────────────────────────────────────────── */
 
 .spinner-wrap {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;

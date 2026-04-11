@@ -1153,7 +1153,7 @@
             top: 0;
             left: 0;
             pointer-events: none;
-            z-index: 5;
+            z-index: 1;
             opacity: 0;
             will-change: transform, opacity;
             user-select: none;
@@ -1196,15 +1196,20 @@
             const startX = goingRight ? -birdSize - 20 : vw + 20;
             const endX = goingRight ? vw + 20 : -birdSize - 20;
 
-            // Random vertical band (top 20%–80% of viewport)
-            const baseY = vh * (0.20 + Math.random() * 0.60);
+            // Random vertical band, but never above the nav (~90px)
+            const minY = Math.max(vh * 0.20, 100);
+            const maxY = vh * 0.80;
+            const baseY = minY + Math.random() * (maxY - minY);
 
-            // Flight duration 4–7 seconds
-            const duration = 4000 + Math.random() * 3000;
+            // Flight duration: usually 5–7s, ~10% chance of a fast zip (2–3s)
+            const isFast = Math.random() < 0.10;
+            const duration = isFast
+                ? 2000 + Math.random() * 1000
+                : 5000 + Math.random() * 2000;
 
-            // Gentle sine wave parameters for bobbing
-            const bobAmp = 15 + Math.random() * 25; // px
-            const bobFreq = 1.5 + Math.random() * 1.5; // full waves during flight
+            // Gentle sine wave parameters for bobbing (minimal when fast)
+            const bobAmp = isFast ? 3 + Math.random() * 4 : 15 + Math.random() * 25; // px
+            const bobFreq = isFast ? 0.5 + Math.random() * 0.5 : 1.5 + Math.random() * 1.5; // full waves during flight
             // Slight diagonal drift
             const driftY = (Math.random() - 0.5) * vh * 0.15;
 
