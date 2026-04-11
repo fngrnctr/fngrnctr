@@ -1136,6 +1136,116 @@
         history.replaceState({ section: initialSection }, '', location.pathname + (initialSection === 'home' ? '' : '#' + initialSection));
         showSection(initialSection, false);
         initSpinner();
+        initScooter();
+    }
+
+    /** Flying bird (Scooter) that occasionally crosses the home section. */
+    function initScooter() {
+        const homeSection = document.getElementById('section-home');
+        if (!homeSection) return;
+
+        const birdImg = document.createElement('img');
+        birdImg.src = 'scooter.png';
+        birdImg.alt = '';
+        birdImg.draggable = false;
+        birdImg.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0;
+            will-change: transform, opacity;
+            user-select: none;
+            -webkit-user-drag: none;
+        `;
+        document.getElementById('site').appendChild(birdImg);
+
+        // Size the bird to ~10% of the hero image dimensions
+        function getBirdSize() {
+            const heroW = Math.min(480, window.innerWidth * 0.8);
+            return Math.round(heroW * 0.10);
+        }
+
+        let flyTimeout = null;
+
+        function scheduleFlight() {
+            // Random interval between 8–20 seconds
+            const delay = (8 + Math.random() * 12) * 1000;
+            flyTimeout = setTimeout(fly, delay);
+        }
+
+        function fly() {
+            // Only fly when home section is visible
+            const homeVisible = !homeSection.classList.contains('hidden');
+            if (!homeVisible) { scheduleFlight(); return; }
+
+            const birdSize = getBirdSize();
+            const birdH = birdSize * 0.38; // aspect ratio of the image ~2.6:1
+            birdImg.style.width = birdSize + 'px';
+            birdImg.style.height = 'auto';
+
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            // Pick direction: left-to-right or right-to-left
+            const goingRight = Math.random() > 0.5;
+            // The bird image faces left, so flip when going right
+            const scaleX = goingRight ? -1 : 1;
+
+            const startX = goingRight ? -birdSize - 20 : vw + 20;
+            const endX = goingRight ? vw + 20 : -birdSize - 20;
+
+            // Random vertical band (top 20%–80% of viewport)
+            const baseY = vh * (0.20 + Math.random() * 0.60);
+
+            // Flight duration 4–7 seconds
+            const duration = 4000 + Math.random() * 3000;
+
+            // Gentle sine wave parameters for bobbing
+            const bobAmp = 15 + Math.random() * 25; // px
+            const bobFreq = 1.5 + Math.random() * 1.5; // full waves during flight
+            // Slight diagonal drift
+            const driftY = (Math.random() - 0.5) * vh * 0.15;
+
+            let startTime = null;
+
+            function animate(ts) {
+                if (!startTime) startTime = ts;
+                const elapsed = ts - startTime;
+                const t = Math.min(elapsed / duration, 1);
+
+                // Ease: slight acceleration then deceleration
+                const eased = t;
+
+                const x = startX + (endX - startX) * eased;
+                const bob = Math.sin(t * bobFreq * Math.PI * 2) * bobAmp;
+                const y = baseY + driftY * t + bob;
+
+                // Fade in/out at edges
+                let opacity = 1;
+                if (t < 0.08) opacity = t / 0.08;
+                else if (t > 0.92) opacity = (1 - t) / 0.08;
+
+                // Slight wing-flap rotation
+                const flapAngle = Math.sin(ts / 120) * 4; // degrees
+
+                birdImg.style.transform = `translate(${x}px, ${y}px) scaleX(${scaleX}) rotate(${flapAngle}deg)`;
+                birdImg.style.opacity = opacity;
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    birdImg.style.opacity = 0;
+                    scheduleFlight();
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // First flight after a short delay
+        flyTimeout = setTimeout(fly, 3000 + Math.random() * 5000);
     }
 
     /** Fidget-spinner physics for the home hero image. */
