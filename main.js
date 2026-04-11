@@ -1181,7 +1181,8 @@
             font: bold 13px/1.3 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            white-space: nowrap;
+            max-width: 140px;
+            text-align: center;
             opacity: 0;
             transition: opacity 0.4s ease, transform 0.6s ease;
         `;
@@ -1244,9 +1245,9 @@
             const startX = goingRight ? -birdSize - 20 : vw + 20;
             const endX = goingRight ? vw + 20 : -birdSize - 20;
 
-            // Random vertical band, but never above the nav (~90px)
-            const minY = Math.max(vh * 0.20, 100);
-            const maxY = vh * 0.80;
+            // Fly low to the ground — bottom 15% of the page
+            const minY = vh * 0.85;
+            const maxY = vh * 0.95;
             const baseY = minY + Math.random() * (maxY - minY);
 
             // Flight duration: usually 5–7s, ~10% chance of a fast zip (2–3s)
