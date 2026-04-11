@@ -1161,6 +1161,54 @@
         `;
         document.getElementById('site').appendChild(birdImg);
 
+        // Speech bubble for when the bird is tapped
+        const quips = [
+            "Hey, I'm zoomin' here!",
+            "Knock it off!",
+            "Yank out your yen!",
+            "Scoot scoot, baby!",
+            "There goes my Tum Tum chicken!",
+            "Buy some merch, dummy!",
+        ];
+        const bubble = document.createElement('div');
+        bubble.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 6;
+            color: #E29755;
+            font: bold 13px/1.3 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.4s ease, transform 0.6s ease;
+        `;
+        document.getElementById('site').appendChild(bubble);
+
+        let bubbleTimer = null;
+        function showBubble(x, y) {
+            clearTimeout(bubbleTimer);
+            bubble.textContent = quips[Math.floor(Math.random() * quips.length)];
+            // Reset transition so it appears instantly at click point
+            bubble.style.transition = 'none';
+            bubble.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+            bubble.style.opacity = '1';
+            // Force reflow, then animate upward and fade
+            void bubble.offsetWidth;
+            bubble.style.transition = 'opacity 0.4s ease, transform 0.6s ease';
+            bubble.style.transform = `translate(${x}px, ${y - 30}px) translate(-50%, -50%)`;
+            bubbleTimer = setTimeout(() => {
+                bubble.style.opacity = '0';
+            }, 1200);
+        }
+
+        birdImg.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            showBubble(e.clientX, e.clientY);
+        });
+
         // Size the bird to ~10% of the hero image dimensions
         function getBirdSize() {
             const heroW = Math.min(480, window.innerWidth * 0.8);
@@ -1242,10 +1290,12 @@
                     requestAnimationFrame(animate);
                 } else {
                     birdImg.style.opacity = 0;
+                    birdImg.style.pointerEvents = 'none';
                     scheduleFlight();
                 }
             }
 
+            birdImg.style.pointerEvents = 'auto';
             requestAnimationFrame(animate);
         }
 
