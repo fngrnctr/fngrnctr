@@ -1190,8 +1190,8 @@
 
             // Pick direction: left-to-right or right-to-left
             const goingRight = Math.random() > 0.5;
-            // The bird image faces left, so flip when going right
-            const scaleX = goingRight ? -1 : 1;
+            // The bird image faces right, so flip when going left
+            const scaleX = goingRight ? 1 : -1;
 
             const startX = goingRight ? -birdSize - 20 : vw + 20;
             const endX = goingRight ? vw + 20 : -birdSize - 20;
