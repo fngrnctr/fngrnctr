@@ -1148,6 +1148,7 @@
         birdImg.src = 'scooter.png';
         birdImg.alt = '';
         birdImg.draggable = false;
+        const HIT_PAD = 12; // px of invisible padding around the bird for easier tapping
         birdImg.style.cssText = `
             position: fixed;
             top: 0;
@@ -1158,6 +1159,8 @@
             will-change: transform, opacity;
             user-select: none;
             -webkit-user-drag: none;
+            padding: ${HIT_PAD}px;
+            box-sizing: content-box;
         `;
         document.getElementById('site').appendChild(birdImg);
 
@@ -1284,7 +1287,7 @@
                 // Slight wing-flap rotation
                 const flapAngle = Math.sin(ts / 120) * 4; // degrees
 
-                birdImg.style.transform = `translate(${x}px, ${y}px) scaleX(${scaleX}) rotate(${flapAngle}deg)`;
+                birdImg.style.transform = `translate(${x - HIT_PAD}px, ${y - HIT_PAD}px) scaleX(${scaleX}) rotate(${flapAngle}deg)`;
                 birdImg.style.opacity = opacity;
 
                 if (t < 1) {
