@@ -1172,6 +1172,9 @@
             "Scoot scoot, baby!",
             "There goes my Tum Tum chicken!",
             "Buy some merch, dummy!",
+            "Don't you have somewhere to be?",
+            "www.fngrnctr.biz",
+            "Find my parents, their names are Fanny and Jimbo. Please!"
         ];
         const bubble = document.createElement('div');
         bubble.style.cssText = `
@@ -1192,9 +1195,13 @@
         document.getElementById('site').appendChild(bubble);
 
         let bubbleTimer = null;
+        let lastQuipIndex = -1;
         function showBubble(x, y) {
             clearTimeout(bubbleTimer);
-            bubble.textContent = quips[Math.floor(Math.random() * quips.length)];
+            let idx;
+            do { idx = Math.floor(Math.random() * quips.length); } while (idx === lastQuipIndex && quips.length > 1);
+            lastQuipIndex = idx;
+            bubble.textContent = quips[idx];
             // Reset transition so it appears instantly at click point
             bubble.style.transition = 'none';
             bubble.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
