@@ -1660,7 +1660,8 @@
         const TINT_FROM = 0.35;     // fraction of BARF_AT where the face starts going green
         const GAG_MS = 1800;          // anticipation shudder once upright, before the first heave
         const SCOOTER_ARRIVE_MS = 5000; // after triggering: brake + shudder + ~1.5 s of barf
-        const SCOOTER_CALL_CHANCE = 0.25; // how often a barf sends Scooter through it
+        const SCOOTER_CALL_CHANCE = 0.1; // how often a barf sends Scooter through it
+        const SCOOTER_FIRST_CALL_AT = 3;  // the first couple of barfs are always Scooter-free
         // Barfing comes in heaves: [start ms, duration ms, strength]
         const HEAVES = [[0, 700, 1], [1000, 450, 0.6], [1650, 950, 1], [2900, 800, 0.8], [3900, 500, 0.5]];
         const HEAVE_TOTAL_MS = 5000;
@@ -1695,6 +1696,7 @@
 
         // ── State ────────────────────────────────────────────────────────────
         let nausea = 0;           // revolutions
+        let barfCount = 0;        // barfs triggered this page load
         let tintLevel = 0;        // 0–1, eased toward its target
         let phase = 'idle';       // idle → settle → gag → heave → idle
         let phaseStart = 0;
@@ -1728,8 +1730,9 @@
                 // Brake back upright first, then gag, then barf
                 setPhase('settle');
                 spinner.settle(() => setPhase('gag'));
+                barfCount++;
                 // Sometimes send Scooter flying through where the barf will land (mouth x once upright)
-                if (scooter && Math.random() < SCOOTER_CALL_CHANCE) {
+                if (scooter && barfCount >= SCOOTER_FIRST_CALL_AT && Math.random() < SCOOTER_CALL_CHANCE) {
                     const r = wrap.getBoundingClientRect();
                     const mouthX = r.left + r.width / 2 + (MOUTH.x - 0.5) * rotor.offsetWidth;
                     scooter.callIn(mouthX, SCOOTER_ARRIVE_MS);
