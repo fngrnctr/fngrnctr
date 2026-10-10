@@ -1135,8 +1135,8 @@
         // Replace current history entry so popstate has a state object
         history.replaceState({ section: initialSection }, '', location.pathname + (initialSection === 'home' ? '' : '#' + initialSection));
         showSection(initialSection, false);
-        initSpinner();
-        initScooter();
+        const scooter = initScooter();
+        initSpinner(scooter);
     }
 
     /** Flying bird (Scooter) that occasionally crosses the home section. */
@@ -1163,6 +1163,58 @@
             box-sizing: content-box;
         `;
         document.getElementById('site').appendChild(birdImg);
+
+        // Barf that hits the bird sticks to him until his next flight. This layer
+        // copies his transform and is masked to his silhouette.
+        const gunk = document.createElement('div');
+        gunk.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0;
+            will-change: transform, opacity;
+            -webkit-mask-image: url(scooter.png);
+            mask-image: url(scooter.png);
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+        `;
+        document.getElementById('site').appendChild(gunk);
+        const MAX_GUNK = 90; // globs, 3 per hit
+
+        // Low-res alpha map of the sprite, so barf only hits where he actually is
+        let alphaMap = null;
+
+        function addGlob(u, v, size, color, drip) {
+            const glob = document.createElement('div');
+            glob.style.cssText = `
+                position: absolute;
+                left: ${HIT_PAD + u - size}px;
+                top: ${HIT_PAD + v - size}px;
+                width: ${size * 2}px;
+                height: ${size * 2 * drip}px;
+                background: ${color};
+                border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+            `;
+            gunk.appendChild(glob);
+        }
+        function buildAlphaMap() {
+            if (!birdImg.naturalWidth) return;
+            const w = 120;
+            const h = Math.round(w * birdImg.naturalHeight / birdImg.naturalWidth);
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const cctx = c.getContext('2d');
+            cctx.drawImage(birdImg, 0, 0, w, h);
+            alphaMap = { data: cctx.getImageData(0, 0, w, h).data, w, h };
+        }
+        if (birdImg.complete) buildAlphaMap();
+        else birdImg.addEventListener('load', buildAlphaMap);
+
+        // Where the bird is right now (null when he's off screen)
+        let flight = null;
 
         // Speech bubble for when the bird is tapped
         const quips = [
@@ -1194,14 +1246,33 @@
         `;
         document.getElementById('site').appendChild(bubble);
 
+        // What he says when he gets barfed on
+        const barfQuips = [
+            "Bro, wtf!!",
+            "No!!",
+            "Not again!",
+            "Better out than in!",
+            "My feathers!",
+            "I just got these washed!",
+            "Say it, don't spray it!",
+            "Ugh, it's in my beak!",
+            "Is that Tum Tum chicken?!",
+            "I'm zoomin' here, not a puke bucket!",
+        ];
+        let lastBarfQuipIndex = -1;
+
         let bubbleTimer = null;
         let lastQuipIndex = -1;
-        function showBubble(x, y) {
+        function showBubble(x, y, text) {
             clearTimeout(bubbleTimer);
-            let idx;
-            do { idx = Math.floor(Math.random() * quips.length); } while (idx === lastQuipIndex && quips.length > 1);
-            lastQuipIndex = idx;
-            bubble.textContent = quips[idx];
+            if (text) {
+                bubble.textContent = text;
+            } else {
+                let idx;
+                do { idx = Math.floor(Math.random() * quips.length); } while (idx === lastQuipIndex && quips.length > 1);
+                lastQuipIndex = idx;
+                bubble.textContent = quips[idx];
+            }
             // Reset transition so it appears instantly at click point
             bubble.style.transition = 'none';
             bubble.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
@@ -1212,7 +1283,7 @@
             bubble.style.transform = `translate(${x}px, ${y - 30}px) translate(-50%, -50%)`;
             bubbleTimer = setTimeout(() => {
                 bubble.style.opacity = '0';
-            }, 1200);
+            }, 1500); // long enough to read
         }
 
         birdImg.addEventListener('pointerdown', (e) => {
@@ -1234,7 +1305,8 @@
             flyTimeout = setTimeout(fly, delay);
         }
 
-        function fly() {
+        /** `target` (optional): { x, inMs } — time the flight to cross screen x after inMs. */
+        function fly(target) {
             // Only fly when home section is visible
             const homeVisible = !homeSection.classList.contains('hidden');
             if (!homeVisible) { scheduleFlight(); return; }
@@ -1244,11 +1316,42 @@
             birdImg.style.width = birdSize + 'px';
             birdImg.style.height = 'auto';
 
+            // Fresh flight, clean bird
+            const spriteH = birdSize * birdImg.naturalHeight / (birdImg.naturalWidth || 1);
+            gunk.replaceChildren();
+            gunk.style.width = (birdSize + 2 * HIT_PAD) + 'px';
+            gunk.style.height = (spriteH + 2 * HIT_PAD) + 'px';
+            gunk.style.webkitMaskSize = gunk.style.maskSize = `${birdSize}px ${spriteH}px`;
+            gunk.style.webkitMaskPosition = gunk.style.maskPosition = `${HIT_PAD}px ${HIT_PAD}px`;
+
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
             // Pick direction: left-to-right or right-to-left
-            const goingRight = Math.random() > 0.5;
+            let goingRight = Math.random() > 0.5;
+
+            // Flight duration: usually 10–14s, ~10% chance of a fast zip (4–6s)
+            let isFast = Math.random() < 0.10;
+            let duration = isFast
+                ? 4000 + Math.random() * 2000
+                : 10000 + Math.random() * 4000;
+
+            if (target) {
+                // Come from a random side, as long as the speed it needs looks like a normal flight
+                const plans = [true, false].map(right => {
+                    const sx = right ? -birdSize - 20 : vw + 20;
+                    const ex = right ? vw + 20 : -birdSize - 20;
+                    const frac = (target.x - birdSize / 2 - sx) / (ex - sx);
+                    return { right, duration: target.inMs / frac };
+                }).filter(p => p.duration >= 3000 && p.duration <= 20000);
+                if (plans.length) {
+                    const plan = plans[Math.floor(Math.random() * plans.length)];
+                    goingRight = plan.right;
+                    duration = plan.duration;
+                    isFast = duration < 7000;
+                }
+            }
+
             // The bird image faces right, so flip when going left
             const scaleX = goingRight ? 1 : -1;
 
@@ -1259,12 +1362,6 @@
             const minY = vh * 0.85;
             const maxY = vh * 0.95;
             const baseY = minY + Math.random() * (maxY - minY);
-
-            // Flight duration: usually 10–14s, ~10% chance of a fast zip (4–6s)
-            const isFast = Math.random() < 0.10;
-            const duration = isFast
-                ? 4000 + Math.random() * 2000
-                : 10000 + Math.random() * 4000;
 
             // Gentle sine wave parameters for bobbing (minimal when fast)
             const bobAmp = isFast ? 3 + Math.random() * 4 : 15 + Math.random() * 25; // px
@@ -1294,13 +1391,19 @@
                 // Slight wing-flap rotation
                 const flapAngle = Math.sin(ts / 120) * 4; // degrees
 
-                birdImg.style.transform = `translate(${x - HIT_PAD}px, ${y - HIT_PAD}px) scaleX(${scaleX}) rotate(${flapAngle}deg)`;
+                const transform = `translate(${x - HIT_PAD}px, ${y - HIT_PAD}px) scaleX(${scaleX}) rotate(${flapAngle}deg)`;
+                birdImg.style.transform = transform;
                 birdImg.style.opacity = opacity;
+                gunk.style.transform = transform;
+                gunk.style.opacity = opacity;
+                flight = { ...flight, x, y, w: birdSize, h: spriteH, scaleX, flapAngle, opacity };
 
                 if (t < 1) {
                     requestAnimationFrame(animate);
                 } else {
                     birdImg.style.opacity = 0;
+                    gunk.style.opacity = 0;
+                    flight = null;
                     birdImg.style.pointerEvents = 'none';
                     scheduleFlight();
                 }
@@ -1310,12 +1413,69 @@
             requestAnimationFrame(animate);
         }
 
+        /**
+         * Called by the barf for each falling drop. If it hits the bird, the drop
+         * sticks to him and this returns true so the barf stops drawing it.
+         */
+        function catchBarf(x, y, r, color) {
+            if (!flight || !alphaMap || flight.opacity < 0.3) return false;
+            const { w, h } = flight;
+            // Undo the flight transform (flip, then flap) to get a point on the sprite
+            const dx = (x - (flight.x + w / 2)) * flight.scaleX;
+            const dy = y - (flight.y + h / 2);
+            const a = -flight.flapAngle * Math.PI / 180;
+            const cu = dx * Math.cos(a) - dy * Math.sin(a) + w / 2;
+            const cv = dx * Math.sin(a) + dy * Math.cos(a) + h / 2;
+            if (cu < -r || cv < -r || cu >= w + r || cv >= h + r) return false;
+
+            // Hit if any part of the drop touches him: try its centre, then its edges
+            const solid = (u, v) => {
+                if (u < 0 || v < 0 || u >= w || v >= h) return false;
+                const ai = Math.floor(u / w * alphaMap.w);
+                const aj = Math.floor(v / h * alphaMap.h);
+                return alphaMap.data[(aj * alphaMap.w + ai) * 4 + 3] >= 128;
+            };
+            const hit = [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]
+                .map(([ox, oy]) => [cu + ox, cv + oy])
+                .find(([u, v]) => solid(u, v));
+            if (!hit) return false;
+            const [u, v] = hit;
+
+            // A splat plus a couple of spatters, big enough to read on a small bird
+            if (gunk.childElementCount < MAX_GUNK) {
+                const size = Math.max(2.5, r * 0.6);
+                addGlob(u, v, size, color, 1 + Math.random() * 0.8); // some globs sag into drips
+                for (let i = 0; i < 2; i++) {
+                    const ang = Math.random() * Math.PI * 2;
+                    const dist = size * (1.2 + Math.random());
+                    addGlob(u + Math.cos(ang) * dist, v + Math.sin(ang) * dist, size * 0.45, color, 1);
+                }
+            }
+            if (!flight.hit) {
+                flight.hit = true;
+                let idx;
+                do { idx = Math.floor(Math.random() * barfQuips.length); } while (idx === lastBarfQuipIndex);
+                lastBarfQuipIndex = idx;
+                showBubble(flight.x + w / 2, flight.y - 12, barfQuips[idx]);
+            }
+            return true;
+        }
+
+        /** Barf is about to fall at screen x: if he's not already out, send him through it. */
+        function callIn(x, inMs) {
+            if (flight || homeSection.classList.contains('hidden')) return;
+            clearTimeout(flyTimeout);
+            fly({ x, inMs });
+        }
+
         // First flight after a short delay
         flyTimeout = setTimeout(fly, 3000 + Math.random() * 2000);
+
+        return { catchBarf, callIn };
     }
 
     /** Fidget-spinner physics for the home hero image. */
-    function initSpinner() {
+    function initSpinner(scooter) {
         const wrap = document.querySelector('.spinner-wrap');
         if (!wrap) return;
         const rotor = wrap.querySelector('.spinner-rotor');
@@ -1368,7 +1528,7 @@
             applyTransform,
             settle,
             unlock: () => { locked = false; },
-        });
+        }, scooter);
 
         // ── Settling (while barfing) ─────────────────────────────────────────
         // A critically damped spring brakes the spin and returns the hero upright.
@@ -1485,7 +1645,7 @@
      * Barf easter egg: spin the hero enough and the face in the "N" turns green,
      * gags, then barfs. Returns hooks the spinner calls on every rotation step.
      */
-    function initBarf(wrap, rotor, spinner) {
+    function initBarf(wrap, rotor, spinner, scooter) {
         const gagFace = rotor.querySelector('[data-face="gag"]');
         const heaveFace = rotor.querySelector('[data-face="heave"]');
         const tint = rotor.querySelector('.face-tint');
@@ -1499,6 +1659,8 @@
         const DRAIN_PER_SEC = 0.025;  // revolutions/sec of recovery
         const TINT_FROM = 0.35;     // fraction of BARF_AT where the face starts going green
         const GAG_MS = 1800;          // anticipation shudder once upright, before the first heave
+        const SCOOTER_ARRIVE_MS = 5000; // after triggering: brake + shudder + ~1.5 s of barf
+        const SCOOTER_CALL_CHANCE = 0.25; // how often a barf sends Scooter through it
         // Barfing comes in heaves: [start ms, duration ms, strength]
         const HEAVES = [[0, 700, 1], [1000, 450, 0.6], [1650, 950, 1], [2900, 800, 0.8], [3900, 500, 0.5]];
         const HEAVE_TOTAL_MS = 5000;
@@ -1566,6 +1728,12 @@
                 // Brake back upright first, then gag, then barf
                 setPhase('settle');
                 spinner.settle(() => setPhase('gag'));
+                // Sometimes send Scooter flying through where the barf will land (mouth x once upright)
+                if (scooter && Math.random() < SCOOTER_CALL_CHANCE) {
+                    const r = wrap.getBoundingClientRect();
+                    const mouthX = r.left + r.width / 2 + (MOUTH.x - 0.5) * rotor.offsetWidth;
+                    scooter.callIn(mouthX, SCOOTER_ARRIVE_MS);
+                }
             }
             start();
         }
@@ -1754,6 +1922,8 @@
                 d.y += d.vy * dt;
                 d.age += dt;
             }
+            // Barf that hits Scooter sticks to him instead of falling
+            if (scooter) drops = drops.filter(d => !scooter.catchBarf(d.x, d.y, d.r1, d.color));
             const landed = d => d.y >= floor - pileAt(d.x);
             drops.filter(landed).forEach(d => land(d, now));
             drops = drops.filter(d => !landed(d) && d.x > -50 && d.x < width + 50);
