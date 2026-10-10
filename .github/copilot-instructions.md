@@ -33,6 +33,7 @@ No framework, no build step — plain HTML/CSS/JS. Three files do everything:
 - **Conventional commits** (`feat:`, `fix:`, `chore:`, etc.)
 - Test locally: `python3 -m http.server 8000` (must use a server, not `file://`, due to image loading)
 - Images (`clouds.png`, `nectar-preview.png`) are in the repo root alongside the source files
+- Unused originals (e.g. full-size AI edits the shipped images were cut from) go in `source-art/`, which is gitignored so they don't get published by GitHub Pages
 - Album art is loaded from Bandcamp CDN (`f4.bcbits.com`)
 
 ## Active work
