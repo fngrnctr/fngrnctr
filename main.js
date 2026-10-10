@@ -1372,12 +1372,14 @@
 
         // ── Settling (while barfing) ─────────────────────────────────────────
         // A critically damped spring brakes the spin and returns the hero upright.
-        const SETTLE_RATE = 0.008; // natural frequency, rad/ms (~0.8 s to settle)
+        const SETTLE_RATE = 0.004; // natural frequency, rad/ms (~1.6 s to settle)
         let locked = false;        // ignore input while the face is barfing
         let settleTarget = 0;
+        let onSettled = null;
 
-        function settle() {
+        function settle(done) {
             locked = true;
+            onSettled = done;
             isDragging = false;
             wrap.classList.remove('grabbing');
             // Aim for the upright position nearest where the spin would naturally stop
@@ -1390,7 +1392,7 @@
             const k = SETTLE_RATE * SETTLE_RATE;
             angularVel += (-k * (angle - settleTarget) - 2 * SETTLE_RATE * angularVel) * dt;
             angle += angularVel * dt;
-            const done = Math.abs(angle - settleTarget) < 0.002 && Math.abs(angularVel) < 0.0005;
+            const done = Math.abs(angle - settleTarget) < 0.01 && Math.abs(angularVel) < 0.001;
             if (done) { angle = 0; angularVel = 0; }
             return !done;
         }
@@ -1405,6 +1407,7 @@
                 const moving = settleStep(dt);
                 applyTransform();
                 rafId = moving ? requestAnimationFrame(tick) : null;
+                if (!moving && onSettled) { const done = onSettled; onSettled = null; done(); }
                 return;
             }
 
@@ -1493,10 +1496,9 @@
 
         // Nausea is measured in revolutions and slowly drains on its own.
         const BARF_AT = 3;          // revolutions of built-up nausea before barfing
-        const DRAIN_PER_SEC = 0.5;  // revolutions/sec of recovery
+        const DRAIN_PER_SEC = 0.025;  // revolutions/sec of recovery
         const TINT_FROM = 0.35;     // fraction of BARF_AT where the face starts going green
-        const GAG_MS = 200;
-        const BRAKE_AFTER_MS = 1200; // keep spinning (and spraying) this long before braking upright
+        const GAG_MS = 1800;          // anticipation shudder once upright, before the first heave
         // Barfing comes in heaves: [start ms, duration ms, strength]
         const HEAVES = [[0, 700, 1], [1000, 450, 0.6], [1650, 950, 1], [2900, 800, 0.8], [3900, 500, 0.5]];
         const HEAVE_TOTAL_MS = 5000;
@@ -1504,13 +1506,13 @@
         const DROPS_PER_MS = 0.35;  // at full heave strength
         const GRAVITY = 0.0022;     // px/ms²
         // Rocking: the heaves are violent enough to sway the whole hero
-        const ROCK_AMP = 0.07;       // radians at full heave strength
+        const ROCK_AMP = 0.12;       // radians at full heave strength
         const ROCK_PERIOD_MS = 450;
         // Pile: a heightfield along the bottom of the screen that drops land on
         const PILE_CELL = 4;         // px per pile column
-        const PILE_VOLUME = 0.35;    // share of each drop's area that ends up in the pile
-        const PILE_SLUMP = 0.12;     // how fast the pile spreads sideways (per 60fps frame, ≤ 0.4)
-        const PILE_HOLD_MS = 4000;   // pile sits this long after the last drop lands…
+        const PILE_VOLUME = 0.12;    // share of each drop's area that ends up in the pile
+        const PILE_SLUMP = 0.2;     // how fast the pile spreads sideways (per 60fps frame, ≤ 0.4)
+        const PILE_HOLD_MS = 3000;   // pile sits this long after the last drop lands…
         const PILE_DRAIN_MS = 700;   // …then sinks away with this time constant
         const MAX_CHUNKS = 600;
         const COLORS = ['#a3b83a', '#c9c24b', '#8a9e2f', '#d9cf7a', '#b9a640', '#7c8f2a'];
@@ -1532,12 +1534,10 @@
         // ── State ────────────────────────────────────────────────────────────
         let nausea = 0;           // revolutions
         let tintLevel = 0;        // 0–1, eased toward its target
-        let phase = 'idle';       // idle → gag → heave → idle
+        let phase = 'idle';       // idle → settle → gag → heave → idle
         let phaseStart = 0;
         let cooldownUntil = 0;
         let emitCarry = 0;        // fractional drops left over between frames
-        let triggeredAt = 0;
-        let braked = false;
         let rockEnv = 0;          // eased heave strength driving the rocking
         let rockPhase = 0;
         let drops = [];
@@ -1563,9 +1563,9 @@
             if (phase !== 'idle' || performance.now() < cooldownUntil) return;
             nausea += Math.abs(deltaRad) / (2 * Math.PI);
             if (nausea >= BARF_AT) {
-                setPhase('gag');
-                triggeredAt = performance.now();
-                braked = false;
+                // Brake back upright first, then gag, then barf
+                setPhase('settle');
+                spinner.settle(() => setPhase('gag'));
             }
             start();
         }
@@ -1698,22 +1698,26 @@
 
             shake.x = 0; shake.y = 0; shake.scale = 1;
             let tintTarget = 0;
-            let heave = 0;
+            let rockDrive = 0;    // 0–1, how hard the hero rocks this frame
 
             if (phase === 'idle') {
                 nausea = Math.max(0, nausea - DRAIN_PER_SEC * dt / 1000);
                 tintTarget = clamp((nausea / BARF_AT - TINT_FROM) / (1 - TINT_FROM), 0, 1);
+            } else if (phase === 'settle') {
+                tintTarget = 1;
             } else if (phase === 'gag') {
                 tintTarget = 1;
-                // Retching shudder that builds up to the heave
-                const amp = 6 * sizeScale * (t / GAG_MS);
+                // Slight shudder that builds: something's about to happen
+                const amp = 1.5 * sizeScale * (1 + 2.5 * (t / GAG_MS));
                 shake.x = (Math.random() - 0.5) * amp;
                 shake.y = (Math.random() - 0.5) * amp;
+                // …with a gentle wobble that grows toward the heave's bigger rocking
+                rockDrive = 0.15 + 0.3 * (t / GAG_MS);
                 if (t >= GAG_MS) setPhase('heave');
             } else if (phase === 'heave') {
                 tintTarget = 1;
                 const s = heaveStrength(t);
-                heave = s;
+                rockDrive = s;
                 shake.scale = 1 + 0.025 * s;
                 shake.y = -3 * sizeScale * s;
                 emitCarry += DROPS_PER_MS * s * dt;
@@ -1729,14 +1733,8 @@
                 }
             }
 
-            // Spray while still spinning for a moment, then brake back upright
-            if (phase !== 'idle' && !braked && now - triggeredAt >= BRAKE_AFTER_MS) {
-                braked = true;
-                spinner.settle();
-            }
-
             // Rocking follows the heaves, lingering a little between them
-            rockEnv += (heave - rockEnv) * (1 - Math.exp(-dt / 220));
+            rockEnv += (rockDrive - rockEnv) * (1 - Math.exp(-dt / 220));
             rockPhase += dt / ROCK_PERIOD_MS * 2 * Math.PI;
             shake.rot = ROCK_AMP * rockEnv * Math.sin(rockPhase);
 
