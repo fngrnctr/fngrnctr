@@ -1229,8 +1229,8 @@
         let flyTimeout = null;
 
         function scheduleFlight() {
-            // Random interval between 8–20 seconds
-            const delay = (8 + Math.random() * 12) * 1000;
+            // Random interval between 6–10 seconds
+            const delay = (6 + Math.random() * 4) * 1000;
             flyTimeout = setTimeout(fly, delay);
         }
 
@@ -1260,11 +1260,11 @@
             const maxY = vh * 0.95;
             const baseY = minY + Math.random() * (maxY - minY);
 
-            // Flight duration: usually 5–7s, ~10% chance of a fast zip (2–3s)
+            // Flight duration: usually 10–14s, ~10% chance of a fast zip (4–6s)
             const isFast = Math.random() < 0.10;
             const duration = isFast
-                ? 2000 + Math.random() * 1000
-                : 5000 + Math.random() * 2000;
+                ? 4000 + Math.random() * 2000
+                : 10000 + Math.random() * 4000;
 
             // Gentle sine wave parameters for bobbing (minimal when fast)
             const bobAmp = isFast ? 3 + Math.random() * 4 : 15 + Math.random() * 25; // px
@@ -1311,7 +1311,7 @@
         }
 
         // First flight after a short delay
-        flyTimeout = setTimeout(fly, 3000 + Math.random() * 5000);
+        flyTimeout = setTimeout(fly, 3000 + Math.random() * 2000);
     }
 
     /** Fidget-spinner physics for the home hero image. */
