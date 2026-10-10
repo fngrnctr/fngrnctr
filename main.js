@@ -1318,7 +1318,7 @@
     function initSpinner() {
         const wrap = document.querySelector('.spinner-wrap');
         if (!wrap) return;
-        const img = wrap.querySelector('.home-hero-img');
+        const rotor = wrap.querySelector('.spinner-rotor');
 
         // ── State ────────────────────────────────────────────────────────────
         let angle = 0;       // current rotation, radians
@@ -1358,7 +1358,41 @@
         }
 
         function applyTransform() {
-            img.style.transform = `rotate(${angle}rad)`;
+            const s = barf.shake;
+            rotor.style.transform = `translate(${s.x}px, ${s.y}px) rotate(${angle + s.rot}rad) scale(${s.scale})`;
+        }
+
+        const barf = initBarf(wrap, rotor, {
+            getAngle: () => angle,
+            getAngularVel: () => angularVel,
+            applyTransform,
+            settle,
+            unlock: () => { locked = false; },
+        });
+
+        // ── Settling (while barfing) ─────────────────────────────────────────
+        // A critically damped spring brakes the spin and returns the hero upright.
+        const SETTLE_RATE = 0.008; // natural frequency, rad/ms (~0.8 s to settle)
+        let locked = false;        // ignore input while the face is barfing
+        let settleTarget = 0;
+
+        function settle() {
+            locked = true;
+            isDragging = false;
+            wrap.classList.remove('grabbing');
+            // Aim for the upright position nearest where the spin would naturally stop
+            const TWO_PI = 2 * Math.PI;
+            settleTarget = Math.round((angle + angularVel / SETTLE_RATE) / TWO_PI) * TWO_PI;
+            startLoop();
+        }
+
+        function settleStep(dt) {
+            const k = SETTLE_RATE * SETTLE_RATE;
+            angularVel += (-k * (angle - settleTarget) - 2 * SETTLE_RATE * angularVel) * dt;
+            angle += angularVel * dt;
+            const done = Math.abs(angle - settleTarget) < 0.002 && Math.abs(angularVel) < 0.0005;
+            if (done) { angle = 0; angularVel = 0; }
+            return !done;
         }
 
         // ── Animation loop (free spin) ───────────────────────────────────────
@@ -1366,6 +1400,13 @@
             if (lastFrameTime === null) lastFrameTime = ts;
             const dt = Math.min(ts - lastFrameTime, 64); // cap to avoid huge jumps
             lastFrameTime = ts;
+
+            if (locked) {
+                const moving = settleStep(dt);
+                applyTransform();
+                rafId = moving ? requestAnimationFrame(tick) : null;
+                return;
+            }
 
             angularVel *= Math.pow(FRICTION_PER_SEC, dt / 1000);
 
@@ -1375,7 +1416,9 @@
                 return; // stop the loop — no waste
             }
 
-            angle += angularVel * dt;
+            const step = angularVel * dt;
+            angle += step;
+            barf.addSpin(step);
             applyTransform();
             rafId = requestAnimationFrame(tick);
         }
@@ -1389,6 +1432,7 @@
         // ── Pointer events ───────────────────────────────────────────────────
         wrap.addEventListener('pointerdown', (e) => {
             if (e.button !== 0 && e.button !== undefined) return; // left-click / touch only
+            if (locked) return;
             wrap.setPointerCapture(e.pointerId);
             isDragging = true;
             lastAngle = pointerAngle(e);
@@ -1409,6 +1453,7 @@
 
             // Image follows finger exactly — no interpolation lag.
             angle += delta;
+            barf.addSpin(delta);
             applyTransform();
 
             // Running angular velocity — used for release flick.
@@ -1431,6 +1476,373 @@
 
         wrap.addEventListener('pointerup', onRelease);
         wrap.addEventListener('pointercancel', onRelease);
+    }
+
+    /**
+     * Barf easter egg: spin the hero enough and the face in the "N" turns green,
+     * gags, then barfs. Returns hooks the spinner calls on every rotation step.
+     */
+    function initBarf(wrap, rotor, spinner) {
+        const gagFace = rotor.querySelector('[data-face="gag"]');
+        const heaveFace = rotor.querySelector('[data-face="heave"]');
+        const tint = rotor.querySelector('.face-tint');
+        const homeSection = document.getElementById('section-home');
+
+        // Mouth in the heave face, as fractions of the hero image's width/height
+        const MOUTH = { x: 0.1151, y: 0.754, w: 0.04 };
+
+        // Nausea is measured in revolutions and slowly drains on its own.
+        const BARF_AT = 3;          // revolutions of built-up nausea before barfing
+        const DRAIN_PER_SEC = 0.5;  // revolutions/sec of recovery
+        const TINT_FROM = 0.35;     // fraction of BARF_AT where the face starts going green
+        const GAG_MS = 200;
+        const BRAKE_AFTER_MS = 1200; // keep spinning (and spraying) this long before braking upright
+        // Barfing comes in heaves: [start ms, duration ms, strength]
+        const HEAVES = [[0, 700, 1], [1000, 450, 0.6], [1650, 950, 1], [2900, 800, 0.8], [3900, 500, 0.5]];
+        const HEAVE_TOTAL_MS = 5000;
+        const COOLDOWN_MS = 3000;
+        const DROPS_PER_MS = 0.35;  // at full heave strength
+        const GRAVITY = 0.0022;     // px/ms²
+        // Rocking: the heaves are violent enough to sway the whole hero
+        const ROCK_AMP = 0.07;       // radians at full heave strength
+        const ROCK_PERIOD_MS = 450;
+        // Pile: a heightfield along the bottom of the screen that drops land on
+        const PILE_CELL = 4;         // px per pile column
+        const PILE_VOLUME = 0.35;    // share of each drop's area that ends up in the pile
+        const PILE_SLUMP = 0.12;     // how fast the pile spreads sideways (per 60fps frame, ≤ 0.4)
+        const PILE_HOLD_MS = 4000;   // pile sits this long after the last drop lands…
+        const PILE_DRAIN_MS = 700;   // …then sinks away with this time constant
+        const MAX_CHUNKS = 600;
+        const COLORS = ['#a3b83a', '#c9c24b', '#8a9e2f', '#d9cf7a', '#b9a640', '#7c8f2a'];
+
+        const canvas = document.createElement('canvas');
+        canvas.className = 'barf-canvas';
+        document.getElementById('site').appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        let dpr = 1;
+        function resizeCanvas() {
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = Math.round(window.innerWidth * dpr);
+            canvas.height = Math.round(window.innerHeight * dpr);
+            const next = new Float32Array(Math.ceil(window.innerWidth / PILE_CELL) + 1);
+            next.set(pile.subarray(0, next.length));
+            pile = next;
+        }
+
+        // ── State ────────────────────────────────────────────────────────────
+        let nausea = 0;           // revolutions
+        let tintLevel = 0;        // 0–1, eased toward its target
+        let phase = 'idle';       // idle → gag → heave → idle
+        let phaseStart = 0;
+        let cooldownUntil = 0;
+        let emitCarry = 0;        // fractional drops left over between frames
+        let triggeredAt = 0;
+        let braked = false;
+        let rockEnv = 0;          // eased heave strength driving the rocking
+        let rockPhase = 0;
+        let drops = [];
+        let pile = new Float32Array(0);
+        let chunks = [];          // lumps sitting in the pile: { x, hy, w, h, color }
+        let lastLandAt = 0;
+        let rafId = null;
+        let lastTs = null;
+        const shake = { x: 0, y: 0, scale: 1, rot: 0 };
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        function setPhase(name) {
+            phase = name;
+            phaseStart = performance.now();
+            // Keep the gag face under the heave face so the crossfade never flashes the original
+            gagFace.classList.toggle('show', name === 'gag' || name === 'heave');
+            heaveFace.classList.toggle('show', name === 'heave');
+        }
+
+        function addSpin(deltaRad) {
+            if (phase !== 'idle' || performance.now() < cooldownUntil) return;
+            nausea += Math.abs(deltaRad) / (2 * Math.PI);
+            if (nausea >= BARF_AT) {
+                setPhase('gag');
+                triggeredAt = performance.now();
+                braked = false;
+            }
+            start();
+        }
+
+        // ── Particles ────────────────────────────────────────────────────────
+        function spawn(count, strength) {
+            const angle = spinner.getAngle();
+            const omega = spinner.getAngularVel();
+            const r = wrap.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            const w = rotor.offsetWidth;
+            const h = rotor.offsetHeight;
+            const sizeScale = w / 480;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+
+            for (let i = 0; i < count; i++) {
+                // Point across the mouth, in image space relative to the hero's centre
+                const lx = (MOUTH.x + (Math.random() - 0.5) * MOUTH.w - 0.5) * w;
+                const ly = (MOUTH.y - 0.5) * h;
+                const ox = lx * cos - ly * sin;
+                const oy = lx * sin + ly * cos;
+
+                // Out of the mouth: mostly "down" in image space, fanned out a bit
+                const vlx = (Math.random() - 0.5) * 0.25 * strength;
+                const vly = (0.08 + Math.random() * 0.22) * strength;
+                // Plus the spin's tangential velocity, so a spinning face sprays like a sprinkler
+                const fling = 0.45;
+                const x = cx + ox;
+                const y = cy + oy;
+                drops.push({
+                    x, y, px: x, py: y,
+                    vx: vlx * cos - vly * sin - omega * oy * fling,
+                    vy: vlx * sin + vly * cos + omega * ox * fling,
+                    r0: (1 + Math.random() * 1.5) * sizeScale,
+                    r1: (2.5 + Math.random() * 4.5) * sizeScale,
+                    age: 0,
+                    color: COLORS[(Math.random() * COLORS.length) | 0],
+                    droplet: false,
+                });
+            }
+        }
+
+        function pileAt(x) {
+            const i = clamp(Math.round(x / PILE_CELL), 0, pile.length - 1);
+            return pile[i] || 0;
+        }
+
+        function land(d, now) {
+            if (d.droplet) return;
+            const size = d.r1;
+            const surface = pileAt(d.x);
+            // Spread the drop's volume over a few columns with a triangular falloff
+            const area = Math.PI * size * size * PILE_VOLUME;
+            const reach = Math.max(2, Math.round(size * 2 / PILE_CELL));
+            const centre = Math.round(d.x / PILE_CELL);
+            const total = reach * reach; // sum of triangle weights
+            for (let k = -reach + 1; k < reach; k++) {
+                const i = centre + k;
+                if (i < 0 || i >= pile.length) continue;
+                pile[i] += area * (reach - Math.abs(k)) / total / PILE_CELL;
+            }
+            chunks.push({
+                x: d.x,
+                hy: surface,
+                w: size * (1.2 + Math.random()),
+                h: size * (0.5 + Math.random() * 0.4),
+                color: d.color,
+            });
+            if (chunks.length > MAX_CHUNKS) chunks.shift();
+            lastLandAt = now;
+            // A couple of small droplets bounce off the floor
+            if (Math.random() < 0.3) {
+                for (let i = 0; i < 2; i++) {
+                    drops.push({
+                        x: d.x, y: d.y, px: d.x, py: d.y,
+                        vx: (Math.random() - 0.5) * 0.3,
+                        vy: -(0.15 + Math.random() * 0.25),
+                        r0: size * 0.35, r1: size * 0.35,
+                        age: 1000,
+                        color: d.color,
+                        droplet: true,
+                    });
+                }
+            }
+        }
+
+        function heaveStrength(t) {
+            let s = 0;
+            for (const [at, dur, strength] of HEAVES) {
+                if (t >= at && t < at + dur) s = Math.max(s, strength * Math.sin(Math.PI * (t - at) / dur));
+            }
+            return s;
+        }
+
+        function updatePile(dt, now) {
+            // Slump: the pile spreads out sideways like a thick liquid
+            const f = Math.min(PILE_SLUMP * dt / 16, 0.4);
+            let prev = pile[0];
+            for (let i = 1; i < pile.length - 1; i++) {
+                const cur = pile[i];
+                pile[i] = cur + f * (prev + pile[i + 1] - 2 * cur);
+                prev = cur;
+            }
+            // After a while with nothing landing, it drains away into the floor
+            if (now - lastLandAt > PILE_HOLD_MS) {
+                const k = Math.exp(-dt / PILE_DRAIN_MS);
+                let max = 0;
+                for (let i = 0; i < pile.length; i++) {
+                    pile[i] *= k;
+                    if (pile[i] > max) max = pile[i];
+                }
+                if (max < 0.3) { pile.fill(0); chunks = []; }
+            }
+        }
+
+        function pileIsEmpty() {
+            return chunks.length === 0 && !pile.some(h => h > 0.3);
+        }
+
+        // ── Loop ─────────────────────────────────────────────────────────────
+        function frame(ts) {
+            if (lastTs === null) lastTs = ts;
+            const dt = Math.min(ts - lastTs, 64);
+            lastTs = ts;
+            const now = performance.now();
+            const t = now - phaseStart;
+            const sizeScale = rotor.offsetWidth / 480;
+
+            shake.x = 0; shake.y = 0; shake.scale = 1;
+            let tintTarget = 0;
+            let heave = 0;
+
+            if (phase === 'idle') {
+                nausea = Math.max(0, nausea - DRAIN_PER_SEC * dt / 1000);
+                tintTarget = clamp((nausea / BARF_AT - TINT_FROM) / (1 - TINT_FROM), 0, 1);
+            } else if (phase === 'gag') {
+                tintTarget = 1;
+                // Retching shudder that builds up to the heave
+                const amp = 6 * sizeScale * (t / GAG_MS);
+                shake.x = (Math.random() - 0.5) * amp;
+                shake.y = (Math.random() - 0.5) * amp;
+                if (t >= GAG_MS) setPhase('heave');
+            } else if (phase === 'heave') {
+                tintTarget = 1;
+                const s = heaveStrength(t);
+                heave = s;
+                shake.scale = 1 + 0.025 * s;
+                shake.y = -3 * sizeScale * s;
+                emitCarry += DROPS_PER_MS * s * dt;
+                const n = Math.floor(emitCarry);
+                emitCarry -= n;
+                if (n > 0) spawn(n, 0.6 + 0.6 * s);
+                if (t >= HEAVE_TOTAL_MS) {
+                    nausea = 0;
+                    emitCarry = 0;
+                    cooldownUntil = now + COOLDOWN_MS;
+                    setPhase('idle');
+                    spinner.unlock();
+                }
+            }
+
+            // Spray while still spinning for a moment, then brake back upright
+            if (phase !== 'idle' && !braked && now - triggeredAt >= BRAKE_AFTER_MS) {
+                braked = true;
+                spinner.settle();
+            }
+
+            // Rocking follows the heaves, lingering a little between them
+            rockEnv += (heave - rockEnv) * (1 - Math.exp(-dt / 220));
+            rockPhase += dt / ROCK_PERIOD_MS * 2 * Math.PI;
+            shake.rot = ROCK_AMP * rockEnv * Math.sin(rockPhase);
+
+            tintLevel += (tintTarget - tintLevel) * (1 - Math.exp(-dt / 250));
+            tint.style.opacity = (tintLevel * 0.5).toFixed(3);
+            spinner.applyTransform();
+
+            // Don't let barf spill onto the other sections
+            if (homeSection.classList.contains('hidden')) { drops = []; chunks = []; pile.fill(0); }
+
+            const floor = window.innerHeight;
+            const width = window.innerWidth;
+            for (const d of drops) {
+                d.px = d.x; d.py = d.y;
+                d.vy += GRAVITY * dt;
+                d.x += d.vx * dt;
+                d.y += d.vy * dt;
+                d.age += dt;
+            }
+            const landed = d => d.y >= floor - pileAt(d.x);
+            drops.filter(landed).forEach(d => land(d, now));
+            drops = drops.filter(d => !landed(d) && d.x > -50 && d.x < width + 50);
+            updatePile(dt, now);
+
+            draw(now, floor);
+
+            const settled = phase === 'idle' && nausea === 0 && tintLevel < 0.01
+                && rockEnv < 0.005 && drops.length === 0 && pileIsEmpty();
+            if (settled) {
+                tintLevel = 0;
+                tint.style.opacity = '0';
+                shake.rot = 0;
+                spinner.applyTransform();
+                rafId = null;
+                return;
+            }
+            rafId = requestAnimationFrame(frame);
+        }
+
+        function draw(now, floor) {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawPile(floor);
+
+            // Drops are drawn as short round-capped streaks so the stream reads as liquid.
+            // They swell as they leave the mouth, as if coming towards the viewer.
+            ctx.globalAlpha = 0.95;
+            ctx.lineCap = 'round';
+            for (const d of drops) {
+                const grow = Math.min(d.age / 250, 1);
+                ctx.strokeStyle = d.color;
+                ctx.lineWidth = 2 * (d.r0 + (d.r1 - d.r0) * grow);
+                ctx.beginPath();
+                ctx.moveTo(d.px, d.py);
+                ctx.lineTo(d.x + 0.01, d.y);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        function drawPile(floor) {
+            let max = 0;
+            for (let i = 0; i < pile.length; i++) if (pile[i] > max) max = pile[i];
+            if (max < 0.3) return;
+
+            ctx.beginPath();
+            ctx.moveTo(0, floor);
+            for (let i = 0; i < pile.length; i++) ctx.lineTo(i * PILE_CELL, floor - pile[i]);
+            ctx.lineTo(canvas.width / dpr, floor);
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(0, floor - max, 0, floor);
+            grad.addColorStop(0, '#c9c24b');
+            grad.addColorStop(1, '#6f8226');
+            ctx.globalAlpha = 0.95;
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // Lumps stay where they landed, but sink as the pile drains
+            for (const c of chunks) {
+                const y = floor - Math.min(c.hy, pileAt(c.x));
+                ctx.fillStyle = c.color;
+                ctx.beginPath();
+                ctx.ellipse(c.x, y, c.w, c.h, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Wet highlight along the surface
+            ctx.beginPath();
+            for (let i = 0; i < pile.length; i++) {
+                const y = floor - pile[i] + 1;
+                if (i === 0) ctx.moveTo(0, y); else ctx.lineTo(i * PILE_CELL, y);
+            }
+            ctx.strokeStyle = 'rgba(240, 235, 160, 0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
+        function start() {
+            if (rafId) return;
+            lastTs = null;
+            rafId = requestAnimationFrame(frame);
+        }
+
+        return { addSpin, shake };
     }
 
     window.addEventListener('resize', () => {
