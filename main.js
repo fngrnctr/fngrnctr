@@ -1531,10 +1531,19 @@
         }, scooter);
 
         // ── Settling (while barfing) ─────────────────────────────────────────
-        // A critically damped spring brakes the spin and returns the hero upright.
-        const SETTLE_RATE = 0.004; // natural frequency, rad/ms (~1.6 s to settle)
-        let locked = false;        // ignore input while the face is barfing
-        let settleTarget = 0;
+        // Brakes the spin without reversing it: the hero keeps turning the same way
+        // and eases to a stop at the next upright position ahead. The path is a cubic
+        // ease-out, p(u) = D * (1 - (1 - u)^3), whose starting speed matches the spin.
+        const SETTLE_IDEAL_MS = 1600;  // preferred brake duration
+        const SETTLE_MIN_MS = 900;
+        const SETTLE_MAX_MS = 3000;
+        const SETTLE_MIN_DIST = 0.4;   // rad; never stop more abruptly than this
+        let locked = false;            // ignore input while the face is barfing
+        let spinDir = 1;               // sign of the most recent rotation
+        let settleFrom = 0;
+        let settleDist = 0;            // signed distance to the upright target
+        let settleDuration = 0;
+        let settleElapsed = 0;
         let onSettled = null;
 
         function settle(done) {
@@ -1542,17 +1551,31 @@
             onSettled = done;
             isDragging = false;
             wrap.classList.remove('grabbing');
-            // Aim for the upright position nearest where the spin would naturally stop
             const TWO_PI = 2 * Math.PI;
-            settleTarget = Math.round((angle + angularVel / SETTLE_RATE) / TWO_PI) * TWO_PI;
+            const dir = spinDir;
+            const speed = Math.sign(angularVel) === dir ? Math.abs(angularVel) : 0;
+            // How far the spin would travel braking over the ideal duration, then
+            // round forward to the nearest upright that is far enough ahead
+            const wanted = Math.max(speed * SETTLE_IDEAL_MS / 3, SETTLE_MIN_DIST);
+            const ahead = ((-dir * angle) % TWO_PI + TWO_PI) % TWO_PI; // distance to next upright ahead
+            let dist = ahead;
+            while (dist < SETTLE_MIN_DIST || dist + TWO_PI - wanted < wanted - dist) dist += TWO_PI;
+            settleFrom = angle;
+            settleDist = dir * dist;
+            settleDuration = speed > 0
+                ? Math.min(Math.max(3 * dist / speed, SETTLE_MIN_MS), SETTLE_MAX_MS)
+                : SETTLE_MAX_MS;
+            settleElapsed = 0;
             startLoop();
         }
 
         function settleStep(dt) {
-            const k = SETTLE_RATE * SETTLE_RATE;
-            angularVel += (-k * (angle - settleTarget) - 2 * SETTLE_RATE * angularVel) * dt;
-            angle += angularVel * dt;
-            const done = Math.abs(angle - settleTarget) < 0.01 && Math.abs(angularVel) < 0.001;
+            settleElapsed += dt;
+            const u = Math.min(settleElapsed / settleDuration, 1);
+            const rem = 1 - u;
+            angle = settleFrom + settleDist * (1 - rem * rem * rem);
+            angularVel = 3 * settleDist / settleDuration * rem * rem;
+            const done = u >= 1;
             if (done) { angle = 0; angularVel = 0; }
             return !done;
         }
@@ -1581,6 +1604,7 @@
 
             const step = angularVel * dt;
             angle += step;
+            spinDir = Math.sign(step);
             barf.addSpin(step);
             applyTransform();
             rafId = requestAnimationFrame(tick);
@@ -1616,6 +1640,7 @@
 
             // Image follows finger exactly — no interpolation lag.
             angle += delta;
+            if (delta !== 0) spinDir = Math.sign(delta);
             barf.addSpin(delta);
             applyTransform();
 
